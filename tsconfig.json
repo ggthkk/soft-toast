@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "jsx": "preserve",
+    "sourceMap": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "lib": ["ESNext", "DOM"],
+    "skipLibCheck": true,
+    "noEmit": true,
+    "declaration": true,
+    "declarationMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@soft-toast/vue": ["./src"],
+      "@soft-toast/vue/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*", "env.d.ts", "playground/*/src/**/*"],
+  "exclude": ["node_modules", "dist", "playground/*/dist"]
+}

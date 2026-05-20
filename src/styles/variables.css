@@ -1,0 +1,83 @@
+/* Soft Toast CSS Variables - Light Theme (Default) */
+:root {
+  /* Colors */
+  --st-bg-default: #ffffff;
+  --st-bg-success: #dcfce7;
+  --st-bg-error: #fee2e2;
+  --st-bg-warning: #fef3c7;
+  --st-bg-info: #dbeafe;
+  
+  --st-text-default: #1f2937;
+  --st-text-success: #166534;
+  --st-text-error: #991b1b;
+  --st-text-warning: #92400e;
+  --st-text-info: #1e40af;
+  
+  --st-border-default: #e5e7eb;
+  --st-border-success: #86efac;
+  --st-border-error: #fca5a5;
+  --st-border-warning: #fcd34d;
+  --st-border-info: #93c5fd;
+  
+  --st-icon-success: #22c55e;
+  --st-icon-error: #ef4444;
+  --st-icon-warning: #f59e0b;
+  --st-icon-info: #3b82f6;
+  
+  /* Shadows */
+  --st-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --st-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --st-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --st-shadow-glow: 0 0 20px rgb(0 0 0 / 0.05);
+  
+  /* Dimensions */
+  --st-toast-min-width: 320px;
+  --st-toast-max-width: 420px;
+  --st-toast-padding: 16px;
+  --st-toast-gap: 12px;
+  --st-border-radius: 9999px;
+  --st-border-radius-blob: 24px;
+  
+  /* Typography */
+  --st-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --st-font-size-sm: 12px;
+  --st-font-size-base: 14px;
+  --st-font-size-lg: 16px;
+  --st-font-weight-normal: 400;
+  --st-font-weight-medium: 500;
+  --st-font-weight-semibold: 600;
+  
+  /* Transitions */
+  --st-transition-fast: 150ms;
+  --st-transition-base: 300ms;
+  --st-transition-slow: 500ms;
+  
+  /* Z-index */
+  --st-z-index: 9999;
+}
+
+/* Dark Theme */
+[data-soft-toast-theme="dark"] {
+  --st-bg-default: #1f2937;
+  --st-bg-success: #14532d;
+  --st-bg-error: #7f1d1d;
+  --st-bg-warning: #713f12;
+  --st-bg-info: #1e3a8a;
+  
+  --st-text-default: #f9fafb;
+  --st-text-success: #86efac;
+  --st-text-error: #fca5a5;
+  --st-text-warning: #fcd34d;
+  --st-text-info: #93c5fd;
+  
+  --st-border-default: #374151;
+  --st-border-success: #166534;
+  --st-border-error: #991b1b;
+  --st-border-warning: #92400e;
+  --st-border-info: #1e40af;
+  
+  --st-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --st-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --st-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  --st-shadow-glow: 0 0 30px rgb(0 0 0 / 0.3);
+}

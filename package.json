@@ -1,0 +1,70 @@
+{
+  "name": "@soft-toast/vue",
+  "version": "2.0.0",
+  "description": "Soft, fluid toast notifications for Vue 3 — part of the @soft-toast family",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./styles": {
+      "import": "./dist/style.css"
+    },
+    "./style.css": "./dist/style.css",
+    "./dist/style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "bun run build.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "prepublishOnly": "bun run build"
+  },
+  "peerDependencies": {
+    "vue": "^3.3.0"
+  },
+  "dependencies": {
+    "@iconify/vue": "5.0.1",
+    "gsap": "^3.12.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.0.0",
+    "vite-plugin-dts": "5.0.0",
+    "vue": "^3.4.0",
+    "vue-tsc": "^2.0.0"
+  },
+  "keywords": [
+    "vue",
+    "vue3",
+    "toast",
+    "notification",
+    "animation",
+    "soft",
+    "fluid"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggthkk/soft-toast"
+  },
+  "homepage": "https://soft-toast.netlify.app",
+  "bugs": {
+    "url": "https://github.com/ggthkk/soft-toast/issues"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}
