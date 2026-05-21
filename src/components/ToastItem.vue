@@ -59,10 +59,19 @@ const isSwipeToDismissEnabled = computed(() => props.swipeToDismiss !== false);
 
 const dismiss = () => {
   if (isDismissing || !toastRef.value) return;
+  const toastId = props.toast.id;
+  const wasLeaving = props.toast.isLeaving;
   isDismissing = true;
   props.toast.isLeaving = true;
-  const tween = exitAnimation(toastRef.value);
-  tween.then(() => toastStore.dismiss(props.toast.id));
+  if (!wasLeaving) props.toast.onDismiss?.(toastId);
+  if (removeFallbackId !== null) {
+    window.clearTimeout(removeFallbackId);
+  }
+  removeFallbackId = window.setTimeout(() => {
+    toastStore.remove(toastId);
+    removeFallbackId = null;
+  }, 320);
+  exitAnimation(toastRef.value);
 };
 
 // ─── Action buttons ──────────────────────────────────────────────────────────
@@ -90,7 +99,7 @@ const normalizedActions = computed(() => {
 
 // ─── Stack position via GSAP ─────────────────────────────────────────────────
 
-const applyStackPosition = (reposition = false) => {
+const applyStackPosition = (reposition = false, overrideOffset?: number) => {
   if (!toastRef.value || props.toast.isLeaving || isSwiping) return;
   positionAnimation(toastRef.value, {
     index: props.index,
@@ -99,7 +108,7 @@ const applyStackPosition = (reposition = false) => {
     bounce: props.toast.bounce,
     spring: props.toast.spring,
     direction: props.stackDirection,
-    expandedOffset: props.expandedOffset,
+    expandedOffset: overrideOffset ?? props.expandedOffset,
     reposition,
   });
 };
@@ -328,8 +337,12 @@ watch(
 
 watch(
   () => props.expanded,
-  () => {
-    applyStackPosition(true);
+  (expanded) => {
+    if (!expanded) {
+      // Collapse: animate immediately back to stacked position
+      applyStackPosition(true);
+    }
+    // Expand: ToastRegion calls applyStackPosition directly after measuring
   },
 );
 
@@ -347,6 +360,8 @@ watch(
     if (leaving) dismiss();
   },
 );
+
+defineExpose({ applyStackPosition });
 
 onUnmounted(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);

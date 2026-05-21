@@ -26,6 +26,10 @@ export const presetConfigs: Record<AnimationPreset, { ease: string; elasticEase:
 
 gsap.defaults({ overwrite: 'auto' })
 
+// Mobile devices get snappier animations (35% faster)
+const isTouchDevice = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+const DUR = (s: number) => isTouchDevice ? s * 0.65 : s
+
 const QUICK_SETTLE_DURATION = 0.22
 const SOFT_SETTLE_EASE = 'power2.out'
 
@@ -68,7 +72,7 @@ const cloudSettleAnimation = (
     opacity: target.opacity,
     force3D: true,
     overwrite: true,
-    duration: clamp(0.34 + distance * 0.003, 0.36, 0.46),
+    duration: DUR(clamp(0.34 + distance * 0.003, 0.36, 0.46)),
     ease: 'sine.out'
   })
 }
@@ -85,7 +89,7 @@ export const landingAnimation = (
   const { direction = 'up', preset = 'smooth' } = options
   const config = presetConfigs[preset] || presetConfigs.smooth
   const yFrom = direction === 'down' ? -14 : 14
-  const landingDuration = Math.min(config.duration, 0.46)
+  const landingDuration = DUR(Math.min(config.duration, 0.46))
   const landingEase = preset === 'bouncy' ? 'back.out(1.35)' : SOFT_SETTLE_EASE
 
   const tl = gsap.timeline()
@@ -113,7 +117,7 @@ export const landingAnimation = (
     tl.to(extra, {
       height: 'auto',
       opacity: 1,
-      duration: 0.36,
+      duration: DUR(0.36),
       force3D: true,
       ease: SOFT_SETTLE_EASE,
       clearProps: 'overflow'
@@ -184,7 +188,7 @@ export const swipeSnapBack = (element: HTMLElement) => {
     opacity: 1,
     force3D: true,
     overwrite: 'auto',
-    duration: 0.55,
+    duration: DUR(0.45),
     ease: 'elastic.out(1, 0.55)'
   })
 }
@@ -249,8 +253,8 @@ export const positionAnimation = (
       ...expandedTarget,
       force3D: true,
       overwrite: 'auto',
-      duration: 0.36,
-      ease: SOFT_SETTLE_EASE
+      duration: DUR(0.12),
+      ease: 'power2.out'
     })
   }
 
@@ -277,7 +281,7 @@ export const positionAnimation = (
     opacity: targetOpacity,
     force3D: true,
     overwrite: 'auto',
-    duration: config.duration * 0.85,
+    duration: DUR(config.duration * 0.85),
     ease: restackEase
   })
 }

@@ -26,6 +26,9 @@ const defaultOptions: Required<Pick<
 
 const toasts = ref<Toast[]>([])
 
+// Non-reactive timer state — lives outside Vue reactivity to avoid per-frame re-renders
+const timerMap = new Map<string, { remainingTime: number; isPaused: boolean }>()
+
 // ─── Computed ─────────────────────────────────────────────────────────────────
 
 const getToastsByPosition = (position: ToastPosition) =>
@@ -65,12 +68,13 @@ const add = (options: ToastOptions): string => {
   }
 
   // ── New toast ──
+  const duration = options.duration ?? defaultOptions.duration
   const toast: Toast = {
     ...defaultOptions,
     ...options,
     id,
     createdAt: Date.now(),
-    remainingTime: options.duration ?? defaultOptions.duration,
+    remainingTime: duration,
     isPaused: false,
     isExpanded: true,
     isLeaving: false,
@@ -80,6 +84,9 @@ const add = (options: ToastOptions): string => {
     showTimestamp: options.showTimestamp ?? defaultOptions.showTimestamp,
     showProgress: options.showProgress ?? defaultOptions.showProgress,
   }
+
+  // Register in non-reactive timer map
+  timerMap.set(id, { remainingTime: duration, isPaused: false })
 
   toasts.value.unshift(toast)
   startTickLoop()
@@ -102,6 +109,7 @@ const update = (id: string, options: Partial<ToastOptions>) => {
 const dismiss = (id?: string | { type?: ToastType | ToastType[] }) => {
   if (!id) {
     toasts.value.forEach((t) => { t.isLeaving = true })
+    timerMap.clear()
     setTimeout(() => { toasts.value = [] }, 400)
     return
   }
@@ -111,6 +119,7 @@ const dismiss = (id?: string | { type?: ToastType | ToastType[] }) => {
     if (toast) {
       toast.isLeaving = true
       toast.onDismiss?.(id)
+      timerMap.delete(id)
       setTimeout(() => {
         toasts.value = toasts.value.filter((t) => t.id !== id)
       }, 400)
@@ -121,6 +130,7 @@ const dismiss = (id?: string | { type?: ToastType | ToastType[] }) => {
       if (types.includes(t.type)) {
         t.isLeaving = true
         t.onDismiss?.(t.id)
+        timerMap.delete(t.id)
       }
     })
     setTimeout(() => {
@@ -130,11 +140,15 @@ const dismiss = (id?: string | { type?: ToastType | ToastType[] }) => {
 }
 
 const pause = (id: string) => {
+  const timer = timerMap.get(id)
+  if (timer) timer.isPaused = true
   const toast = toasts.value.find((t) => t.id === id)
   if (toast) toast.isPaused = true
 }
 
 const resume = (id: string) => {
+  const timer = timerMap.get(id)
+  if (timer) timer.isPaused = false
   const toast = toasts.value.find((t) => t.id === id)
   if (toast) toast.isPaused = false
 }
@@ -163,18 +177,30 @@ const startTickLoop = () => {
     const delta = currentTime - lastTime
     lastTime = currentTime
 
-    toasts.value.forEach((toast) => {
-      if (!toast.isPaused && !toast.isLeaving && toast.remainingTime > 0 && toast.duration !== Infinity) {
-        toast.remainingTime -= delta
-        if (toast.remainingTime <= 0) {
-          toast.isLeaving = true
-          toast.onAutoClose?.(toast.id)
-          setTimeout(() => {
-            toasts.value = toasts.value.filter((t) => t.id !== toast.id)
-          }, 400)
-        }
-      }
+    // Tick non-reactive timer map — zero Vue reactivity cost per frame
+    const expiredIds: string[] = []
+    timerMap.forEach((timer, id) => {
+      if (timer.isPaused) return
+      const toast = toasts.value.find((t) => t.id === id)
+      if (!toast || toast.isLeaving || toast.duration === Infinity) return
+      timer.remainingTime -= delta
+      // Sync remainingTime back to toast only for progress bar consumers
+      if (toast.showProgress) toast.remainingTime = timer.remainingTime
+      if (timer.remainingTime <= 0) expiredIds.push(id)
     })
+
+    // Mutate Vue state only when a toast actually expires
+    for (const id of expiredIds) {
+      timerMap.delete(id)
+      const toast = toasts.value.find((t) => t.id === id)
+      if (toast && !toast.isLeaving) {
+        toast.isLeaving = true
+        toast.onAutoClose?.(id)
+        setTimeout(() => {
+          toasts.value = toasts.value.filter((t) => t.id !== id)
+        }, 400)
+      }
+    }
 
     if (toasts.value.length > 0) {
       rafId = requestAnimationFrame(loop)
@@ -237,9 +263,13 @@ const promise = async <T>(
   }
 }
 
-const clearAll = () => { toasts.value = [] }
+const clearAll = () => {
+  timerMap.clear()
+  toasts.value = []
+}
 
 const remove = (id: string) => {
+  timerMap.delete(id)
   toasts.value = toasts.value.filter((t) => t.id !== id)
 }
 

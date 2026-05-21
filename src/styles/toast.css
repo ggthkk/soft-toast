@@ -44,7 +44,6 @@
   line-height: 1.45;
   cursor: default;
   user-select: none;
-  will-change: transform, opacity;
   touch-action: pan-y;
 
   /* Clean modern white card */
