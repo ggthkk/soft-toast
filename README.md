@@ -6,7 +6,7 @@ A toast notification library for Vue 3 with soft motion, compact defaults, and f
 
 - **Fluid Motion**: Smooth enter, exit, stack, and swipe interactions.
 - **Stacked Layout**: Toasts stay compact, readable, and easy to scan.
-- **Position Options**: 11 positions including corners, edges, and center.
+- **Position Options**: 10 positions including corners and edges.
 - **Motion Presets**: Choose from `smooth`, `bouncy`, `subtle`, or `snappy` presets.
 - **Rich Content**: Supports titles, descriptions, action buttons, progress bars, and custom icons.
 - **Promise Handling**: Built-in support for async operations with loading states.
@@ -153,7 +153,7 @@ toast.error("Network Error", {
 
 | Property        | Type                                           | Default       | Description                                                    |
 | --------------- | ---------------------------------------------- | ------------- | -------------------------------------------------------------- |
-| `position`      | `ToastPosition`                                | `'top-right'` | Position on screen (e.g. `'top'`, `'bottom-left'`, `'center'`) |
+| `position`      | `ToastPosition`                                | `'top-right'` | Position on screen (e.g. `'top'`, `'bottom-left'`, `'right'`)  |
 | `duration`      | `number`                                       | `4000`        | Auto-close delay in ms (`Infinity` disables auto-close)        |
 | `preset`        | `'smooth' \| 'bouncy' \| 'subtle' \| 'snappy'` | `'smooth'`    | Motion style                                                   |
 | `description`   | `string \| VNode`                              | `undefined`   | Secondary text below the title                                 |
@@ -182,8 +182,28 @@ toast.info("Custom Icon", { icon: MyIcon });
 
 Available slots: `#icon`, `#title`, `#description`, `#action`, `#close-button`.
 
+When you want to provide slots, disable the plugin's automatic container and render the container in your app layout:
+
+```typescript
+app.use(SoftToastPlugin, {
+  autoMount: false,
+});
+```
+
 ```vue
 <SoftToastContainer>
+  <template #icon="{ toast }">
+    <div class="my-custom-icon">{{ toast.type }}</div>
+  </template>
+
+  <template #title="{ toast }">
+    <strong>{{ toast.title }}</strong>
+  </template>
+
+  <template #description="{ toast }">
+    <p>{{ toast.description }}</p>
+  </template>
+
   <!-- Override the close button -->
   <template #close-button="{ dismiss }">
     <button @click="dismiss" class="my-custom-close-btn">Close</button>
@@ -191,17 +211,32 @@ Available slots: `#icon`, `#title`, `#description`, `#action`, `#close-button`.
   
   <!-- Override the action button -->
   <template #action="{ toast, execute }">
-    <button @click="execute" class="my-custom-action-btn">
-      {{ toast.action.label }}
+    <button
+      v-for="action in Array.isArray(toast.action) ? toast.action : [toast.action]"
+      :key="action.label"
+      @click="execute(action)"
+      class="my-custom-action-btn"
+    >
+      {{ action.label }}
     </button>
+  </template>
+</SoftToastContainer>
+```
+
+Use `slotFilter` when only some toasts should use the custom slot renderer. Toasts that do not match the filter keep the built-in icon, title, action, close button, and swipe behavior:
+
+```vue
+<SoftToastContainer :slot-filter="(toast) => toast.id === 'custom-toast'">
+  <template #title="{ toast }">
+    <strong>{{ toast.title }}</strong>
   </template>
 </SoftToastContainer>
 ```
 
 ## Positions
 
-11 available positions:
-`top-left`, `top-center`, `top-right`, `bottom-left`, `bottom-center`, `bottom-right`, `top`, `bottom`, `left`, `right`, `center`.
+10 available positions:
+`top-left`, `top-center`, `top-right`, `bottom-left`, `bottom-center`, `bottom-right`, `top`, `bottom`, `left`, `right`.
 
 ## License
 

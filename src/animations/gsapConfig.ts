@@ -26,7 +26,6 @@ export const presetConfigs: Record<AnimationPreset, { ease: string; elasticEase:
 
 gsap.defaults({ overwrite: 'auto' })
 
-const SOFT_SETTLE_DURATION = 0.42
 const QUICK_SETTLE_DURATION = 0.22
 const SOFT_SETTLE_EASE = 'power2.out'
 

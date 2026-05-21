@@ -1,7 +1,7 @@
 import type { VNode, Component } from 'vue'
 
 export type ToastType = 'default' | 'success' | 'error' | 'warning' | 'info' | 'promise'
-export type ToastPosition = 'top' | 'bottom' | 'left' | 'right' | 'center' | 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'
+export type ToastPosition = 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'
 export type AnimationPreset = 'smooth' | 'bouncy' | 'subtle' | 'snappy'
 export type QueueOverflow = 'drop-oldest' | 'drop-newest'
 
@@ -108,8 +108,10 @@ export interface ToastContainerProps {
   queueOverflow?: QueueOverflow
   dir?: 'ltr' | 'rtl'
   swipeToDismiss?: boolean
+  slotFilter?: (toast: Toast) => boolean
 }
 
 export interface ToastPluginOptions extends ToastContainerProps {
   teleportTarget?: string
+  autoMount?: boolean
 }

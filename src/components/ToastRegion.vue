@@ -62,6 +62,13 @@ onMounted(() => {
 
   // Pause all timers when user switches tab / window loses focus
   document.addEventListener("visibilitychange", handleVisibilityChange);
+  // iOS: collapse expanded stack when tapping outside
+  document.addEventListener("touchstart", handleOutsideTap, { passive: true });
+
+  // Must be non-passive to call preventDefault and block page scroll when expanded
+  stackRef.value?.addEventListener("touchmove", handleStackTouchMove, {
+    passive: false,
+  });
 
   if (listRef.value && typeof ResizeObserver !== "undefined") {
     resizeObserver = new ResizeObserver(() => measureOffsets());
@@ -74,6 +81,8 @@ onUnmounted(() => {
     document.removeEventListener("keydown", handleKeydown);
   }
   document.removeEventListener("visibilitychange", handleVisibilityChange);
+  document.removeEventListener("touchstart", handleOutsideTap);
+  stackRef.value?.removeEventListener("touchmove", handleStackTouchMove);
   if (resizeObserver) resizeObserver.disconnect();
 });
 
@@ -109,6 +118,7 @@ watch(
 
 // Position classes
 const positionClass = computed(() => `soft-toast-container--${props.position}`);
+const isCenterAligned = computed(() => props.position.endsWith("-center"));
 
 // Visual Indexing (ignore leaving toasts so the stack closes gaps instantly)
 const activeToasts = computed(() =>
@@ -136,16 +146,16 @@ const measureOffsets = () => {
   const offsets: number[] = [];
   let cumulative = 0;
   let firstActiveHeight = 0;
-  
+
   for (let i = 0; i < items.length; i++) {
     offsets.push(cumulative);
-    
+
     // Only accumulate height if the toast is not leaving
     if (items[i].getAttribute("data-leaving") !== "true") {
       cumulative += items[i].offsetHeight + gapPx;
       // The front toast is the one that has visual index 0
       const toastId = items[i].dataset.toastId;
-      const t = positionToasts.value.find(x => x.id === toastId);
+      const t = positionToasts.value.find((x) => x.id === toastId);
       if (t) {
         const vIdx = getVisualIndex(t, positionToasts.value.indexOf(t));
         if (vIdx === 0) {
@@ -154,11 +164,11 @@ const measureOffsets = () => {
       }
     }
   }
-  
+
   expandedOffsets.value = offsets;
   frontHeight.value = firstActiveHeight;
   totalHeight.value = Math.max(0, cumulative - gapPx);
-  
+
   // Re-clamp scroll if height changes while expanded
   if (isExpanded.value && listRef.value) {
     clampAndApplyScroll(0); // Applies bounds check without adding new delta
@@ -170,54 +180,65 @@ const currentScrollY = ref(0);
 
 const clampAndApplyScroll = (deltaY: number) => {
   if (!listRef.value) return;
-  
+
   // Viewport padding buffer
-  const buffer = 120; 
+  const buffer = 120;
   const windowHeight = window.innerHeight;
-  
+
   // We only need to scroll if the total stack height exceeds the viewport
-  const maxScrollNeeded = Math.max(0, totalHeight.value - windowHeight + buffer);
-  
+  const maxScrollNeeded = Math.max(
+    0,
+    totalHeight.value - windowHeight + buffer,
+  );
+
   if (stackDirection.value === "up") {
-    // Stack builds upwards (y goes negative). 
+    // Stack builds upwards (y goes negative).
     // To see higher items, we scroll UP (deltaY < 0), so we translate DOWN (y goes positive).
     currentScrollY.value -= deltaY;
-    currentScrollY.value = Math.max(0, Math.min(currentScrollY.value, maxScrollNeeded));
+    currentScrollY.value = Math.max(
+      0,
+      Math.min(currentScrollY.value, maxScrollNeeded),
+    );
   } else {
     // Stack builds downwards (y goes positive).
     // To see lower items, we scroll DOWN (deltaY > 0), so we translate UP (y goes negative).
     currentScrollY.value -= deltaY;
-    currentScrollY.value = Math.max(-maxScrollNeeded, Math.min(currentScrollY.value, 0));
+    currentScrollY.value = Math.max(
+      -maxScrollNeeded,
+      Math.min(currentScrollY.value, 0),
+    );
   }
-  
+
   gsap.to(listRef.value, {
     y: currentScrollY.value,
     duration: 0.4,
     ease: "power3.out",
-    overwrite: "auto"
+    overwrite: "auto",
   });
 };
 
 const handleWheel = (e: WheelEvent) => {
   if (!isExpanded.value) return;
-  
+
   // Check if the scroll originated from inside a scrollable element (like a long description)
   let target = e.target as HTMLElement | null;
   let isInternalScroll = false;
-  
+
   while (target && target !== stackRef.value) {
     const style = window.getComputedStyle(target);
     const overflowY = style.overflowY;
-    
+
     // Check if the element is capable of vertical scrolling
     if (overflowY === "auto" || overflowY === "scroll") {
       // It is a scrollable container. Check if it actually has overflow
       if (target.scrollHeight > target.clientHeight) {
         // Check if we can scroll in the direction of the wheel
         // (deltaY > 0 is scrolling down, deltaY < 0 is scrolling up)
-        const canScrollDown = Math.ceil(target.scrollTop + target.clientHeight) < target.scrollHeight;
+        const canScrollDown =
+          Math.ceil(target.scrollTop + target.clientHeight) <
+          target.scrollHeight;
         const canScrollUp = target.scrollTop > 0;
-        
+
         if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
           isInternalScroll = true;
           break; // It's a valid internal scroll, stop checking parents
@@ -226,16 +247,19 @@ const handleWheel = (e: WheelEvent) => {
     }
     target = target.parentElement;
   }
-  
+
   if (isInternalScroll) {
     // Don't intercept the wheel event; let the internal scrollbar handle it
     return;
   }
 
   // If we don't need to scroll the main stack, don't prevent default so page can scroll normally
-  const maxScrollNeeded = Math.max(0, totalHeight.value - window.innerHeight + 120);
+  const maxScrollNeeded = Math.max(
+    0,
+    totalHeight.value - window.innerHeight + 120,
+  );
   if (maxScrollNeeded <= 0) return;
-  
+
   e.preventDefault();
   clampAndApplyScroll(e.deltaY);
 };
@@ -256,14 +280,77 @@ const handleStackLeave = () => {
   // Reset GSAP scroll when mouse leaves
   currentScrollY.value = 0;
   if (listRef.value) {
-    gsap.to(listRef.value, { y: 0, duration: 0.5, ease: "power3.out", overwrite: "auto" });
+    gsap.to(listRef.value, {
+      y: 0,
+      duration: 0.5,
+      ease: "power3.out",
+      overwrite: "auto",
+    });
   }
+};
+
+// iOS/touch: distinguish tap vs scroll before acting
+let tapStartX = 0;
+let tapStartY = 0;
+let touchScrollLastY = 0;
+
+const handleStackTouchStart = (e: TouchEvent) => {
+  tapStartX = e.touches[0].clientX;
+  tapStartY = e.touches[0].clientY;
+  touchScrollLastY = e.touches[0].clientY;
+};
+
+const handleStackTouchEnd = (e: TouchEvent) => {
+  if (positionToasts.value.length <= 1) return;
+  const dx = Math.abs((e.changedTouches[0]?.clientX ?? tapStartX) - tapStartX);
+  const dy = Math.abs((e.changedTouches[0]?.clientY ?? tapStartY) - tapStartY);
+  // If finger moved more than 8px it was a scroll/swipe, not a tap
+  if (dx > 8 || dy > 8) return;
+  if (isExpanded.value) {
+    handleStackLeave();
+  } else {
+    e.preventDefault();
+    handleStackEnter();
+  }
+};
+
+const handleOutsideTap = (e: TouchEvent) => {
+  if (!isExpanded.value) return;
+  if (containerRef.value && !containerRef.value.contains(e.target as Node)) {
+    handleStackLeave();
+  }
+};
+
+// Prevent page scroll bleeding through AND scroll the list when stack is expanded
+const handleStackTouchMove = (e: TouchEvent) => {
+  if (!isExpanded.value) return;
+  e.preventDefault();
+
+  const currentY = e.touches[0].clientY;
+  const deltaY = touchScrollLastY - currentY; // positive = scrolling down
+  touchScrollLastY = currentY;
+
+  const maxScrollNeeded = Math.max(
+    0,
+    totalHeight.value - window.innerHeight + 120,
+  );
+  if (maxScrollNeeded <= 0) return;
+
+  clampAndApplyScroll(deltaY);
 };
 
 // Direction the stack peeks toward (bottom positions peek up, top positions peek down)
 const stackDirection = computed<"up" | "down">(() =>
   props.position.includes("bottom") ? "up" : "down",
 );
+
+const listStyle = computed(() => ({
+  height: `${listHeightPx.value}px`,
+  width: isCenterAligned.value ? "100%" : undefined,
+}));
+
+const shouldUseSlots = (toast: any) => props.slotFilter?.(toast) ?? true;
+const isSwipeToDismissEnabled = computed(() => props.swipeToDismiss !== false);
 </script>
 
 <template>
@@ -284,30 +371,53 @@ const stackDirection = computed<"up" | "down">(() =>
         :data-direction="stackDirection"
         @mouseenter="handleStackEnter"
         @mouseleave="handleStackLeave"
+        @touchstart.stop="handleStackTouchStart"
+        @touchend.stop="handleStackTouchEnd"
         @wheel="handleWheel"
         data-lenis-prevent="true"
       >
-        <div
-          ref="listRef"
-          class="soft-toast-list"
-          :style="{ height: listHeightPx + 'px' }"
-        >
-          <ToastItem
-            v-for="(toast, idx) in positionToasts"
-            :key="toast.id"
-            :toast="toast"
-            :index="getVisualIndex(toast, idx)"
-            :total="activeToasts.length"
-            :expanded="isExpanded"
-            :expanded-offset="expandedOffsets[idx] ?? 0"
-            :stack-direction="stackDirection"
-            :close-button="toast.closeButton ?? closeButton"
-            :swipe-to-dismiss="swipeToDismiss"
-          >
-            <template v-for="(_, name) in $slots" #[name]="slotProps">
-              <slot :name="name" v-bind="slotProps || {}" />
-            </template>
-          </ToastItem>
+        <div ref="listRef" class="soft-toast-list" :style="listStyle">
+          <template v-for="(toast, idx) in positionToasts" :key="toast.id">
+            <ToastItem
+              v-if="shouldUseSlots(toast)"
+              :toast="toast"
+              :index="getVisualIndex(toast, idx)"
+              :total="activeToasts.length"
+              :expanded="isExpanded"
+              :expanded-offset="expandedOffsets[idx] ?? 0"
+              :stack-direction="stackDirection"
+              :interactive="isExpanded || getVisualIndex(toast, idx) === 0"
+              :close-button="toast.closeButton ?? closeButton"
+              :swipe-to-dismiss="isSwipeToDismissEnabled"
+              :style="
+                isCenterAligned
+                  ? { left: '50%', marginLeft: '-50%' }
+                  : undefined
+              "
+            >
+              <template v-for="(_, name) in $slots" #[name]="slotProps">
+                <slot :name="name" v-bind="slotProps || {}" />
+              </template>
+            </ToastItem>
+
+            <ToastItem
+              v-else
+              :toast="toast"
+              :index="getVisualIndex(toast, idx)"
+              :total="activeToasts.length"
+              :expanded="isExpanded"
+              :expanded-offset="expandedOffsets[idx] ?? 0"
+              :stack-direction="stackDirection"
+              :interactive="isExpanded || getVisualIndex(toast, idx) === 0"
+              :close-button="toast.closeButton ?? closeButton"
+              :swipe-to-dismiss="isSwipeToDismissEnabled"
+              :style="
+                isCenterAligned
+                  ? { left: '50%', marginLeft: '-50%' }
+                  : undefined
+              "
+            />
+          </template>
         </div>
       </div>
     </div>
@@ -327,6 +437,8 @@ const stackDirection = computed<"up" | "down">(() =>
   max-width: 100%;
   display: flex;
   flex-direction: column;
+  /* No 300ms tap delay on iOS */
+  touch-action: manipulation;
   /* NO overflow constraints here to prevent shadow clipping. 
      GSAP translation handles scrolling visually without clipping! */
 }
@@ -355,26 +467,27 @@ const stackDirection = computed<"up" | "down">(() =>
 }
 
 /* Horizontal alignment based on container position */
-.soft-toast-container[data-position$="left"] .soft-toast-list > :deep(.soft-toast-item) {
+.soft-toast-container[data-position$="left"]
+  .soft-toast-list
+  > :deep(.soft-toast-item) {
   left: 0;
   right: auto;
 }
-.soft-toast-container[data-position$="right"] .soft-toast-list > :deep(.soft-toast-item) {
+.soft-toast-container[data-position$="right"]
+  .soft-toast-list
+  > :deep(.soft-toast-item) {
   right: 0;
   left: auto;
 }
-.soft-toast-container[data-position$="center"] .soft-toast-list > :deep(.soft-toast-item) {
-  left: 50%;
-  transform: translateX(-50%); /* Base horizontal centering before GSAP adds translateY */
-}
-
 /* Bottom-anchored stacks (top positions peek down): items anchored to top edge */
-.soft-toast-stack[data-direction="down"] :deep(.soft-toast-list > .soft-toast-item) {
+.soft-toast-stack[data-direction="down"]
+  :deep(.soft-toast-list > .soft-toast-item) {
   top: 0;
   bottom: auto;
 }
 /* Top-anchored stacks (bottom positions peek up): items anchored to bottom edge */
-.soft-toast-stack[data-direction="up"] :deep(.soft-toast-list > .soft-toast-item) {
+.soft-toast-stack[data-direction="up"]
+  :deep(.soft-toast-list > .soft-toast-item) {
   top: auto;
   bottom: 0;
 }

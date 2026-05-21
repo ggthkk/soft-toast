@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import type { Toast } from "../types";
 import { toastStore } from "../stores/toastStore";
-import { Icon } from '@iconify/vue';
+import { Icon } from "@iconify/vue";
 import ToastIcon from "./ToastIcon.vue";
 import ToastProgress from "./ToastProgress.vue";
 import { registerToastIcons } from "../icons";
@@ -28,6 +28,7 @@ interface Props {
   expandedOffset?: number;
   stackDirection?: "up" | "down";
   reposition?: boolean;
+  interactive?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -39,6 +40,7 @@ const props = withDefaults(defineProps<Props>(), {
   expandedOffset: 0,
   stackDirection: "up",
   reposition: false,
+  interactive: true,
 });
 
 const toastRef = ref<HTMLElement | null>(null);
@@ -50,6 +52,8 @@ const formattedTime = computed(() => {
   const date = new Date(props.toast.createdAt);
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 });
+
+const isSwipeToDismissEnabled = computed(() => props.swipeToDismiss !== false);
 
 // ─── Dismiss ────────────────────────────────────────────────────────────────
 
@@ -79,13 +83,15 @@ const handleAction = async (act: any) => {
 
 const normalizedActions = computed(() => {
   if (!props.toast.action) return [];
-  return Array.isArray(props.toast.action) ? props.toast.action : [props.toast.action];
+  return Array.isArray(props.toast.action)
+    ? props.toast.action
+    : [props.toast.action];
 });
 
 // ─── Stack position via GSAP ─────────────────────────────────────────────────
 
 const applyStackPosition = (reposition = false) => {
-  if (!toastRef.value || props.toast.isLeaving) return;
+  if (!toastRef.value || props.toast.isLeaving || isSwiping) return;
   positionAnimation(toastRef.value, {
     index: props.index,
     expanded: props.expanded,
@@ -107,12 +113,88 @@ const applyStackPosition = (reposition = false) => {
 //   - Miss threshold → elastic snap-back spring
 
 let swipeStartX = 0;
+let swipeStartY = 0;
 let swipeStartTime = 0;
 let isSwiping = false;
+let directionLocked = false;
 let swipeCurrentX = 0;
+let activePointerId: number | null = null;
+let activePointerTarget: HTMLElement | null = null;
+let lostCaptureFallbackId: number | null = null;
+let removeFallbackId: number | null = null;
+
+const clearLostCaptureFallback = () => {
+  if (lostCaptureFallbackId === null) return;
+  window.clearTimeout(lostCaptureFallbackId);
+  lostCaptureFallbackId = null;
+};
+
+const releaseActivePointer = () => {
+  if (activePointerId === null || !activePointerTarget) return;
+  try {
+    if (activePointerTarget.hasPointerCapture(activePointerId)) {
+      activePointerTarget.releasePointerCapture(activePointerId);
+    }
+  } catch {
+    // Safari can throw if capture was already lost during touch handoff.
+  }
+};
+
+const removeSwipeFallbackListeners = () => {
+  window.removeEventListener("pointermove", handlePointerMove);
+  window.removeEventListener("pointerup", handlePointerUp);
+  window.removeEventListener("pointercancel", handlePointerCancel);
+};
+
+const resetSwipeTracking = () => {
+  isSwiping = false;
+  directionLocked = false;
+  clearLostCaptureFallback();
+  releaseActivePointer();
+  removeSwipeFallbackListeners();
+  activePointerId = null;
+  activePointerTarget = null;
+};
+
+const snapBackSwipe = () => {
+  if (!toastRef.value) return;
+  gsap.set(toastRef.value, { rotate: 0 });
+  swipeSnapBack(toastRef.value);
+  toastStore.resume(props.toast.id);
+};
+
+const completeSwipe = () => {
+  if (!toastRef.value) return;
+
+  const dx = swipeCurrentX;
+  const elapsed = Math.max(1, Date.now() - swipeStartTime);
+  const velocity = (Math.abs(dx) / elapsed) * 1000; // px/s
+  const width = toastRef.value.offsetWidth;
+  const threshold = width * 0.35;
+  resetSwipeTracking();
+
+  if (Math.abs(dx) >= threshold || velocity >= 500) {
+    // --- Dismiss: fly off in swipe direction ---
+    isDismissing = true;
+    const toastId = props.toast.id;
+    props.toast.isLeaving = true;
+    if (removeFallbackId !== null) {
+      window.clearTimeout(removeFallbackId);
+    }
+    removeFallbackId = window.setTimeout(() => {
+      toastStore.remove(toastId);
+      removeFallbackId = null;
+    }, 320);
+    const flyX = dx > 0 ? width * 1.6 : -width * 1.6;
+    swipeExitAnimation(toastRef.value, flyX);
+  } else {
+    // --- Snap back with spring ---
+    snapBackSwipe();
+  }
+};
 
 const handlePointerDown = (e: PointerEvent) => {
-  if (!props.swipeToDismiss || isDismissing) return;
+  if (!isSwipeToDismissEnabled.value || isDismissing || isSwiping) return;
   // Only primary button for mouse; all pointers for touch/stylus
   if (e.pointerType === "mouse" && e.button !== 0) return;
   // Ignore if target is a button/link (don't hijack action clicks)
@@ -120,12 +202,24 @@ const handlePointerDown = (e: PointerEvent) => {
   if (target.closest("button, a")) return;
 
   swipeStartX = e.clientX;
+  swipeStartY = e.clientY;
   swipeStartTime = Date.now();
   isSwiping = true;
+  directionLocked = false;
   swipeCurrentX = 0;
+  activePointerId = e.pointerId;
+  activePointerTarget = e.currentTarget as HTMLElement;
+  gsap.killTweensOf(toastRef.value);
 
   // Capture pointer so move/up fire even if cursor leaves the element
-  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  try {
+    activePointerTarget.setPointerCapture(e.pointerId);
+  } catch {
+    // Some WebKit touch paths may decline capture; window fallbacks still finish the gesture.
+  }
+  window.addEventListener("pointermove", handlePointerMove);
+  window.addEventListener("pointerup", handlePointerUp);
+  window.addEventListener("pointercancel", handlePointerCancel);
 
   // Pause timer while swiping
   toastStore.pause(props.toast.id);
@@ -133,8 +227,28 @@ const handlePointerDown = (e: PointerEvent) => {
 
 const handlePointerMove = (e: PointerEvent) => {
   if (!isSwiping || !toastRef.value) return;
+  if (activePointerId !== null && e.pointerId !== activePointerId) return;
+  clearLostCaptureFallback();
 
   const dx = e.clientX - swipeStartX;
+  const dy = e.clientY - swipeStartY;
+
+  // Direction lock: first significant movement decides swipe vs scroll
+  if (!directionLocked) {
+    if (Math.abs(dy) > Math.abs(dx) + 4) {
+      // Vertical gesture — cancel swipe, let browser scroll
+      resetSwipeTracking();
+      snapBackSwipe();
+      return;
+    }
+    if (Math.abs(dx) > Math.abs(dy) + 4) {
+      directionLocked = true;
+    } else {
+      return; // not enough movement yet
+    }
+  }
+
+  e.preventDefault();
   swipeCurrentX = dx;
 
   // Clamp opacity: full at 0, gone at 70% of width
@@ -148,41 +262,39 @@ const handlePointerMove = (e: PointerEvent) => {
 
 const handlePointerUp = (e: PointerEvent) => {
   if (!isSwiping || !toastRef.value) return;
-  isSwiping = false;
+  if (activePointerId !== null && e.pointerId !== activePointerId) return;
 
-  const dx = swipeCurrentX;
-  const elapsed = Math.max(1, Date.now() - swipeStartTime);
-  const velocity = (Math.abs(dx) / elapsed) * 1000; // px/s
-  const width = toastRef.value.offsetWidth;
-  const threshold = width * 0.35;
-
-  if (Math.abs(dx) >= threshold || velocity >= 500) {
-    // --- Dismiss: fly off in swipe direction ---
-    isDismissing = true;
-    props.toast.isLeaving = true;
-    const flyX = dx > 0 ? width * 1.6 : -width * 1.6;
-    swipeExitAnimation(toastRef.value, flyX).then(() => {
-      toastStore.remove(props.toast.id);
-    });
-  } else {
-    // --- Snap back with spring ---
-    gsap.set(toastRef.value, { rotate: 0 }); // reset tilt first
-    swipeSnapBack(toastRef.value);
-    toastStore.resume(props.toast.id);
-  }
+  completeSwipe();
 };
 
-const handlePointerCancel = () => {
+const handlePointerCancel = (e?: PointerEvent) => {
   if (!isSwiping || !toastRef.value) return;
-  isSwiping = false;
-  gsap.set(toastRef.value, { rotate: 0 });
-  swipeSnapBack(toastRef.value);
-  toastStore.resume(props.toast.id);
+  if (e && activePointerId !== null && e.pointerId !== activePointerId) return;
+  resetSwipeTracking();
+  snapBackSwipe();
+};
+
+const handleLostPointerCapture = (e: PointerEvent) => {
+  if (!isSwiping || !toastRef.value) return;
+  if (activePointerId !== null && e.pointerId !== activePointerId) return;
+  activePointerTarget = null;
+  clearLostCaptureFallback();
+  lostCaptureFallbackId = window.setTimeout(() => {
+    if (isSwiping) completeSwipe();
+  }, 300);
+};
+
+const handleVisibilityChange = () => {
+  if (document.hidden && isSwiping) {
+    resetSwipeTracking();
+    snapBackSwipe();
+  }
 };
 
 // ─── Lifecycle ───────────────────────────────────────────────────────────────
 
 onMounted(() => {
+  document.addEventListener("visibilitychange", handleVisibilityChange);
   if (!toastRef.value) return;
   const isBottom = props.toast.position.includes("bottom");
   const tl = landingAnimation(toastRef.value, {
@@ -198,19 +310,28 @@ onMounted(() => {
 
 // Split the watches so a dismiss only creates one restack animation.
 // Collapsed stacks move by index; expanded stacks move by measured offsets.
-watch(() => props.index, (newIndex, oldIndex) => {
-  if (props.expanded) return;
-  applyStackPosition(newIndex < oldIndex || props.reposition);
-})
+watch(
+  () => props.index,
+  (newIndex, oldIndex) => {
+    if (props.expanded) return;
+    applyStackPosition(newIndex < oldIndex || props.reposition);
+  },
+);
 
-watch(() => props.expandedOffset, (newOffset, oldOffset) => {
-  if (!props.expanded) return;
-  applyStackPosition(newOffset !== oldOffset);
-})
+watch(
+  () => props.expandedOffset,
+  (newOffset, oldOffset) => {
+    if (!props.expanded) return;
+    applyStackPosition(newOffset !== oldOffset);
+  },
+);
 
-watch(() => props.expanded, () => {
-  applyStackPosition(true)
-})
+watch(
+  () => props.expanded,
+  () => {
+    applyStackPosition(true);
+  },
+);
 
 watch(
   () => props.expanded,
@@ -222,10 +343,21 @@ watch(
 
 watch(
   () => props.toast.isLeaving,
-  (leaving) => { if (leaving) dismiss(); },
+  (leaving) => {
+    if (leaving) dismiss();
+  },
 );
 
 onUnmounted(() => {
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+  if (isSwiping) {
+    resetSwipeTracking();
+    toastStore.resume(props.toast.id);
+  }
+  if (removeFallbackId !== null) {
+    window.clearTimeout(removeFallbackId);
+    removeFallbackId = null;
+  }
   if (toastRef.value) killAnimations(toastRef.value);
 });
 </script>
@@ -234,17 +366,23 @@ onUnmounted(() => {
   <div
     ref="toastRef"
     class="soft-toast-item"
-    :class="{ 'soft-toast-item--swipeable': swipeToDismiss }"
+    :class="{ 'soft-toast-item--swipeable': isSwipeToDismissEnabled }"
     :data-type="toast.type"
     :data-st-index="index"
+    :data-toast-id="toast.id"
     :data-leaving="toast.isLeaving"
+    :data-interactive="interactive"
     :style="{ zIndex: 1000 - index }"
     @pointerdown="handlePointerDown"
-    @pointermove="handlePointerMove"
-    @pointerup="handlePointerUp"
     @pointercancel="handlePointerCancel"
+    @lostpointercapture="handleLostPointerCapture"
   >
-    <slot name="close-button" :toast="toast" :dismiss="dismiss">
+    <slot
+      name="close-button"
+      :toast="toast"
+      :dismiss="dismiss"
+      :close-button="closeButton"
+    >
       <button
         v-if="closeButton"
         class="soft-toast-close"
@@ -254,15 +392,33 @@ onUnmounted(() => {
         @click.stop="dismiss"
         aria-label="Close"
       >
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" class="st-close-icon">
-          <path class="st-close-line-1" d="M1 1L9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-          <path class="st-close-line-2" d="M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          fill="none"
+          class="st-close-icon"
+        >
+          <path
+            class="st-close-line-1"
+            d="M1 1L9 9"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          />
+          <path
+            class="st-close-line-2"
+            d="M9 1L1 9"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          />
         </svg>
       </button>
     </slot>
 
     <div class="soft-toast-content">
-      <slot name="icon" :toast="toast">
+      <slot name="icon" :toast="toast" :close-button="closeButton">
         <div v-if="toast.type === 'promise'" class="soft-toast-icon">
           <Icon
             class="soft-toast-icon-svg"
@@ -271,7 +427,11 @@ onUnmounted(() => {
             :height="18"
           />
         </div>
-        <ToastIcon v-else-if="toast.icon && typeof toast.icon === 'string'" :type="toast.type" :customIcon="toast.icon" />
+        <ToastIcon
+          v-else-if="toast.icon && typeof toast.icon === 'string'"
+          :type="toast.type"
+          :customIcon="toast.icon"
+        />
         <div v-else-if="toast.icon" class="soft-toast-icon">
           <component :is="toast.icon" />
         </div>
@@ -280,16 +440,25 @@ onUnmounted(() => {
 
       <div class="soft-toast-body">
         <div class="soft-toast-header-row">
-          <slot name="title" :toast="toast">
+          <slot name="title" :toast="toast" :close-button="closeButton">
             <p
               class="soft-toast-title"
-              :class="{ 'soft-toast-title--has-close': closeButton === true || closeButton === 'top-right' }"
-            >{{ toast.title }}</p>
+              :class="{
+                'soft-toast-title--has-close':
+                  closeButton === true || closeButton === 'top-right',
+              }"
+            >
+              {{ toast.title }}
+            </p>
           </slot>
         </div>
 
-        <div v-if="toast.description || toast.action" class="soft-toast-extra" style="overflow: hidden;">
-          <slot name="description" :toast="toast">
+        <div
+          v-if="toast.description || toast.action"
+          class="soft-toast-extra"
+          style="overflow: hidden"
+        >
+          <slot name="description" :toast="toast" :close-button="closeButton">
             <p v-if="toast.description" class="soft-toast-description">
               <component
                 v-if="typeof toast.description === 'object'"
@@ -299,7 +468,13 @@ onUnmounted(() => {
             </p>
           </slot>
 
-          <slot name="action" :toast="toast" :execute="handleAction" :hasSucceeded="hasActionSucceeded">
+          <slot
+            name="action"
+            :toast="toast"
+            :execute="handleAction"
+            :hasSucceeded="hasActionSucceeded"
+            :close-button="closeButton"
+          >
             <div
               v-if="normalizedActions.length > 0 && !hasActionSucceeded"
               class="soft-toast-action"
@@ -308,7 +483,10 @@ onUnmounted(() => {
                 v-for="(act, idx) in normalizedActions"
                 :key="idx"
                 class="soft-toast-action-button"
-                :class="[act.class || '', act.primary ? 'soft-toast-action-primary' : '']"
+                :class="[
+                  act.class || '',
+                  act.primary ? 'soft-toast-action-primary' : '',
+                ]"
                 @click.stop="() => handleAction(act)"
               >
                 {{ act.label }}
@@ -333,7 +511,9 @@ onUnmounted(() => {
     </div>
 
     <ToastProgress
-      v-if="toast.showProgress && toast.duration > 0 && toast.duration !== Infinity"
+      v-if="
+        toast.showProgress && toast.duration > 0 && toast.duration !== Infinity
+      "
       :remaining-time="toast.remainingTime"
       :total-duration="toast.duration"
       :is-paused="toast.isPaused"

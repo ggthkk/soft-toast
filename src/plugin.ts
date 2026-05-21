@@ -19,7 +19,8 @@ let pluginOptions: ToastPluginOptions = {
   queueOverflow: 'drop-oldest',
   dir: 'ltr',
   swipeToDismiss: true,
-  teleportTarget: 'body'
+  teleportTarget: 'body',
+  autoMount: true
 }
 
 // Flag to check if container is mounted
@@ -30,8 +31,10 @@ export const SoftToastPlugin = {
     // Merge options
     pluginOptions = { ...pluginOptions, ...options }
     
+    app.component('SoftToastContainer', ToastContainer)
+
     // Only mount container once
-    if (!isContainerMounted && typeof window !== 'undefined') {
+    if (pluginOptions.autoMount !== false && !isContainerMounted && typeof window !== 'undefined') {
       // Create a container div
       const containerId = 'soft-toast-global-container'
       let container = document.getElementById(containerId)
@@ -41,9 +44,6 @@ export const SoftToastPlugin = {
         container.id = containerId
         document.body.appendChild(container)
       }
-      
-      // Mount ToastContainer
-      app.component('SoftToastContainer', ToastContainer)
       
       // Create a mini-app instance just for the toast container
       const toastContainerApp = createApp({
@@ -62,7 +62,9 @@ export const SoftToastPlugin = {
           maxQueue: pluginOptions.maxQueue,
           queueOverflow: pluginOptions.queueOverflow,
           dir: pluginOptions.dir,
-          swipeToDismiss: pluginOptions.swipeToDismiss
+          swipeToDismiss: pluginOptions.swipeToDismiss,
+          showTimestamp: pluginOptions.showTimestamp,
+          slotFilter: pluginOptions.slotFilter
         })
       })
       

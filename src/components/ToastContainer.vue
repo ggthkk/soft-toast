@@ -7,10 +7,11 @@ const props = withDefaults(defineProps<ToastContainerProps>(), {
   position: "top-right",
   maxQueue: 10,
   queueOverflow: "drop-oldest",
+  swipeToDismiss: true,
 });
 
 const positions: ToastPosition[] = [
-  "top", "bottom", "left", "right", "center",
+  "top", "bottom", "left", "right",
   "top-left",
   "top-center",
   "top-right",
