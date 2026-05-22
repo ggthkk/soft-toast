@@ -48,7 +48,7 @@ const allToasts = computed(() => toasts.value)
 
 /**
  * Add a toast — or UPDATE an existing one if the same `id` is already visible.
- * This automatic deduplication means calling toast.error('Oops', { id: 'network-error' })
+ * This automatic deduplication means calling softToast.error('Oops', { id: 'network-error' })
  * five times in a row results in ONE toast that refreshes its content each time.
  */
 const add = (options: ToastOptions): string => {

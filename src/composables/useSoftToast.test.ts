@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { useToast, toast } from './useToast'
+import { useSoftToast, softToast } from './useSoftToast'
 import { toastStore } from '../stores/toastStore'
 
 // Reset store state before each test
@@ -7,11 +7,11 @@ beforeEach(() => {
   toastStore.clearAll()
 })
 
-// ─── useToast() composable ────────────────────────────────────────────────────
+// ─── useSoftToast() composable ────────────────────────────────────────────────────
 
-describe('useToast()', () => {
+describe('useSoftToast()', () => {
   it('returns an object with all API methods', () => {
-    const t = useToast()
+    const t = useSoftToast()
     expect(typeof t.default).toBe('function')
     expect(typeof t.success).toBe('function')
     expect(typeof t.error).toBe('function')
@@ -27,7 +27,7 @@ describe('useToast()', () => {
   })
 
   it('default() adds a toast with type "default"', () => {
-    const t = useToast()
+    const t = useSoftToast()
     const id = t.default('Hello')
     const toasts = toastStore.toasts.value
     expect(toasts.length).toBe(1)
@@ -37,32 +37,32 @@ describe('useToast()', () => {
   })
 
   it('success() adds a toast with type "success"', () => {
-    const t = useToast()
+    const t = useSoftToast()
     t.success('Done!')
     expect(toastStore.toasts.value[0].type).toBe('success')
     expect(toastStore.toasts.value[0].title).toBe('Done!')
   })
 
   it('error() adds a toast with type "error"', () => {
-    const t = useToast()
+    const t = useSoftToast()
     t.error('Oops!')
     expect(toastStore.toasts.value[0].type).toBe('error')
   })
 
   it('warning() adds a toast with type "warning"', () => {
-    const t = useToast()
+    const t = useSoftToast()
     t.warning('Watch out!')
     expect(toastStore.toasts.value[0].type).toBe('warning')
   })
 
   it('info() adds a toast with type "info"', () => {
-    const t = useToast()
+    const t = useSoftToast()
     t.info('FYI')
     expect(toastStore.toasts.value[0].type).toBe('info')
   })
 
   it('custom() passes options through directly', () => {
-    const t = useToast()
+    const t = useSoftToast()
     t.custom({ type: 'success', title: 'Custom', description: 'My desc', duration: 9999 })
     const added = toastStore.toasts.value[0]
     expect(added.title).toBe('Custom')
@@ -71,7 +71,7 @@ describe('useToast()', () => {
   })
 
   it('update() changes an existing toast', () => {
-    const t = useToast()
+    const t = useSoftToast()
     const id = t.default('Before')
     t.update(id, { title: 'After', type: 'success' })
     const updated = toastStore.toasts.value.find(x => x.id === id)
@@ -80,7 +80,7 @@ describe('useToast()', () => {
   })
 
   it('dismiss() marks toast as isLeaving', () => {
-    const t = useToast()
+    const t = useSoftToast()
     const id = t.default('Bye')
     t.dismiss(id)
     const toast = toastStore.toasts.value.find(x => x.id === id)
@@ -88,7 +88,7 @@ describe('useToast()', () => {
   })
 
   it('pause() and resume() toggle isPaused', () => {
-    const t = useToast()
+    const t = useSoftToast()
     const id = t.default('Pausing')
     t.pause(id)
     expect(toastStore.toasts.value[0].isPaused).toBe(true)
@@ -97,7 +97,7 @@ describe('useToast()', () => {
   })
 
   it('forward options like duration, description, position', () => {
-    const t = useToast()
+    const t = useSoftToast()
     t.success('With opts', {
       description: 'More info',
       duration: 1234,
@@ -110,75 +110,75 @@ describe('useToast()', () => {
   })
 })
 
-// ─── toast (static object) ────────────────────────────────────────────────────
+// ─── softToast (static object) ────────────────────────────────────────────────
 
-describe('toast (static API)', () => {
-  it('toast.success() adds a success toast', () => {
-    toast.success('Static success')
+describe('softToast (static API)', () => {
+  it('softToast.success() adds a success toast', () => {
+    softToast.success('Static success')
     expect(toastStore.toasts.value[0].type).toBe('success')
     expect(toastStore.toasts.value[0].title).toBe('Static success')
   })
 
-  it('toast.error() adds an error toast', () => {
-    toast.error('Static error')
+  it('softToast.error() adds an error toast', () => {
+    softToast.error('Static error')
     expect(toastStore.toasts.value[0].type).toBe('error')
   })
 
-  it('toast.warning() adds a warning toast', () => {
-    toast.warning('Careful')
+  it('softToast.warning() adds a warning toast', () => {
+    softToast.warning('Careful')
     expect(toastStore.toasts.value[0].type).toBe('warning')
   })
 
-  it('toast.info() adds an info toast', () => {
-    toast.info('Just so you know')
+  it('softToast.info() adds an info toast', () => {
+    softToast.info('Just so you know')
     expect(toastStore.toasts.value[0].type).toBe('info')
   })
 
-  it('toast.default() adds a default toast', () => {
-    toast.default('Hello world')
+  it('softToast.default() adds a default toast', () => {
+    softToast.default('Hello world')
     expect(toastStore.toasts.value[0].type).toBe('default')
   })
 
-  it('toast.custom() adds toast with arbitrary options', () => {
-    toast.custom({ title: 'Custom static', type: 'info', id: 'static-1' })
+  it('softToast.custom() adds toast with arbitrary options', () => {
+    softToast.custom({ title: 'Custom static', type: 'info', id: 'static-1' })
     expect(toastStore.toasts.value[0].id).toBe('static-1')
     expect(toastStore.toasts.value[0].title).toBe('Custom static')
   })
 
-  it('toast.update() modifies a toast', () => {
-    const id = toast.default('Initial')
-    toast.update(id, { title: 'Updated' })
+  it('softToast.update() modifies a toast', () => {
+    const id = softToast.default('Initial')
+    softToast.update(id, { title: 'Updated' })
     expect(toastStore.toasts.value.find(x => x.id === id)?.title).toBe('Updated')
   })
 
-  it('toast.pause() and toast.resume() work', () => {
-    const id = toast.info('Pausable')
-    toast.pause(id)
+  it('softToast.pause() and softToast.resume() work', () => {
+    const id = softToast.info('Pausable')
+    softToast.pause(id)
     expect(toastStore.toasts.value[0].isPaused).toBe(true)
-    toast.resume(id)
+    softToast.resume(id)
     expect(toastStore.toasts.value[0].isPaused).toBe(false)
   })
 
-  it('toast.dismiss() marks toast as leaving', () => {
-    const id = toast.success('Going away')
-    toast.dismiss(id)
+  it('softToast.dismiss() marks toast as leaving', () => {
+    const id = softToast.success('Going away')
+    softToast.dismiss(id)
     expect(toastStore.toasts.value.find(x => x.id === id)?.isLeaving).toBe(true)
   })
 
   it('multiple toasts are ordered newest-first', () => {
-    toast.default('First')
-    toast.success('Second')
-    toast.error('Third')
+    softToast.default('First')
+    softToast.success('Second')
+    softToast.error('Third')
     const titles = toastStore.toasts.value.map(t => t.title)
     expect(titles).toEqual(['Third', 'Second', 'First'])
   })
 })
 
-// ─── toast.promise() ─────────────────────────────────────────────────────────
+// ─── softToast.promise() ─────────────────────────────────────────────────────────
 
-describe('toast.promise()', () => {
+describe('softToast.promise()', () => {
   it('resolves: updates toast to success', async () => {
-    const id = await toast.promise(
+    const id = await softToast.promise(
       Promise.resolve('ok'),
       { loading: 'Loading…', success: 'Done!', error: 'Failed' }
     )
@@ -191,7 +191,7 @@ describe('toast.promise()', () => {
   it('rejects: updates toast to error and re-throws', async () => {
     let caught: unknown
     try {
-      await toast.promise(
+      await softToast.promise(
         Promise.reject(new Error('boom')),
         { loading: 'Loading…', success: 'Done!', error: 'Something failed' }
       )
@@ -206,25 +206,25 @@ describe('toast.promise()', () => {
 
 // ─── Flash & sound API surface ────────────────────────────────────────────────
 
-describe('useToast() — flash API methods', () => {
+describe('useSoftToast() — flash API methods', () => {
   it('returns flash, showFlashes, hasFlashes methods', () => {
-    const t = useToast()
+    const t = useSoftToast()
     expect(typeof t.flash).toBe('function')
     expect(typeof t.showFlashes).toBe('function')
     expect(typeof t.hasFlashes).toBe('function')
   })
 })
 
-describe('toast (static) — flash API methods', () => {
-  it('toast.flash is a function', () => {
-    expect(typeof toast.flash).toBe('function')
+describe('softToast (static) — flash API methods', () => {
+  it('softToast.flash is a function', () => {
+    expect(typeof softToast.flash).toBe('function')
   })
 
-  it('toast.showFlashes is a function', () => {
-    expect(typeof toast.showFlashes).toBe('function')
+  it('softToast.showFlashes is a function', () => {
+    expect(typeof softToast.showFlashes).toBe('function')
   })
 
-  it('toast.hasFlashes is a function', () => {
-    expect(typeof toast.hasFlashes).toBe('function')
+  it('softToast.hasFlashes is a function', () => {
+    expect(typeof softToast.hasFlashes).toBe('function')
   })
 })

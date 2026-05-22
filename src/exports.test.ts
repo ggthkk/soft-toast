@@ -4,6 +4,23 @@ import { describe, it, expect } from 'bun:test'
 // This acts as a "contract test" — if something is accidentally removed, CI will catch it.
 
 describe('Package exports', () => {
+  it('exports the expected public API', async () => {
+    const api = await import('./index')
+    expect(Object.keys(api).sort()).toEqual([
+      'SoftToastPlugin',
+      'ToastContainer',
+      'ToastItem',
+      'consumeFlashes',
+      'getToastOptions',
+      'hasPendingFlashes',
+      'queueFlash',
+      'softToast',
+      'toastStore',
+      'useFlash',
+      'useSoftToast',
+    ])
+  })
+
   it('exports SoftToastPlugin with install()', async () => {
     const { SoftToastPlugin } = await import('./index')
     expect(SoftToastPlugin).toBeDefined()
@@ -20,33 +37,33 @@ describe('Package exports', () => {
     expect(opts).toHaveProperty('theme')
   })
 
-  it('exports useToast()', async () => {
-    const { useToast } = await import('./index')
-    expect(typeof useToast).toBe('function')
-    const api = useToast()
+  it('exports useSoftToast()', async () => {
+    const { useSoftToast } = await import('./index')
+    expect(typeof useSoftToast).toBe('function')
+    const api = useSoftToast()
     expect(typeof api.success).toBe('function')
     expect(typeof api.error).toBe('function')
   })
 
-  it('exports toast object', async () => {
-    const { toast } = await import('./index')
-    expect(toast).toBeDefined()
-    expect(typeof toast.success).toBe('function')
-    expect(typeof toast.error).toBe('function')
-    expect(typeof toast.warning).toBe('function')
-    expect(typeof toast.info).toBe('function')
-    expect(typeof toast.default).toBe('function')
-    expect(typeof toast.promise).toBe('function')
-    expect(typeof toast.custom).toBe('function')
-    expect(typeof toast.update).toBe('function')
-    expect(typeof toast.dismiss).toBe('function')
-    expect(typeof toast.dismissAll).toBe('function')
-    expect(typeof toast.pause).toBe('function')
-    expect(typeof toast.resume).toBe('function')
+  it('exports softToast object', async () => {
+    const { softToast } = await import('./index')
+    expect(softToast).toBeDefined()
+    expect(typeof softToast.success).toBe('function')
+    expect(typeof softToast.error).toBe('function')
+    expect(typeof softToast.warning).toBe('function')
+    expect(typeof softToast.info).toBe('function')
+    expect(typeof softToast.default).toBe('function')
+    expect(typeof softToast.promise).toBe('function')
+    expect(typeof softToast.custom).toBe('function')
+    expect(typeof softToast.update).toBe('function')
+    expect(typeof softToast.dismiss).toBe('function')
+    expect(typeof softToast.dismissAll).toBe('function')
+    expect(typeof softToast.pause).toBe('function')
+    expect(typeof softToast.resume).toBe('function')
     // Flash & sound API
-    expect(typeof toast.flash).toBe('function')
-    expect(typeof toast.showFlashes).toBe('function')
-    expect(typeof toast.hasFlashes).toBe('function')
+    expect(typeof softToast.flash).toBe('function')
+    expect(typeof softToast.showFlashes).toBe('function')
+    expect(typeof softToast.hasFlashes).toBe('function')
   })
 
   it('exports toastStore with all methods', async () => {

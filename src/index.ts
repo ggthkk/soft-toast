@@ -1,6 +1,6 @@
 // Main exports
 export { SoftToastPlugin, getToastOptions } from './plugin'
-export { useToast, toast } from './composables/useToast'
+export { useSoftToast, softToast } from './composables/useSoftToast'
 export { useFlash, queueFlash, consumeFlashes, hasPendingFlashes } from './composables/useFlash'
 export { toastStore } from './stores/toastStore'
 
@@ -22,4 +22,3 @@ export type {
   AnimationPreset,
   QueueOverflow
 } from './types'
-

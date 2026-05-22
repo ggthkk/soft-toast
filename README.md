@@ -98,12 +98,12 @@ Use it anywhere in your Vue or Nuxt components:
 
 ```vue
 <script setup>
-import { useToast } from "@soft-toast/vue";
+import { useSoftToast } from "@soft-toast/vue";
 
-const toast = useToast();
+const softToast = useSoftToast();
 
 const showToast = () => {
-  toast.success("Profile saved!", {
+  softToast.success("Profile saved!", {
     description: "Your changes have been successfully saved.",
     position: "top-right",
     duration: 2500,
@@ -121,7 +121,7 @@ const showToast = () => {
 The plugin options are global defaults. You can override them per toast when a page needs different behavior:
 
 ```typescript
-toast.warning("File moved to trash", {
+softToast.warning("File moved to trash", {
   description: "You can restore it from the activity log.",
   position: "bottom-right",
   duration: Infinity,
@@ -132,14 +132,14 @@ toast.warning("File moved to trash", {
 
 ## API Overview
 
-### `toast[type](title, options)`
+### `softToast[type](title, options)`
 
 Available types: `default`, `success`, `error`, `warning`, `info`, `promise`.
 
 **Example:**
 
 ```typescript
-toast.error("Network Error", {
+softToast.error("Network Error", {
   description: "Failed to connect to the server.",
   duration: 6000,
   action: {
@@ -169,11 +169,11 @@ Supports **Iconify** icons and custom Vue components.
 
 ```typescript
 // 1. Using Iconify icon string
-toast.success("Awesome!", { icon: "line-md:star" });
+softToast.success("Awesome!", { icon: "line-md:star" });
 
 // 2. Using a Custom Vue Component
 import MyIcon from "./MyIcon.vue";
-toast.info("Custom Icon", { icon: MyIcon });
+softToast.info("Custom Icon", { icon: MyIcon });
 ```
 
 ## Slot Architecture

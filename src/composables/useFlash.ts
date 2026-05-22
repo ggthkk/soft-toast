@@ -6,7 +6,7 @@
  *
  * Usage:
  *   // Before redirect:
- *   toast.flash('Profile saved!', { type: 'success' })
+ *   softToast.flash('Profile saved!', { type: 'success' })
  *   router.push('/dashboard')
  *
  *   // In the destination page (or App.vue):

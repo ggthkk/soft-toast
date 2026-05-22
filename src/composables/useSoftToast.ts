@@ -4,7 +4,7 @@ import { queueFlash, consumeFlashes, hasPendingFlashes } from './useFlash'
 
 // ─── Composable API ───────────────────────────────────────────────────────────
 
-export const useToast = () => ({
+export const useSoftToast = () => ({
   default: (title: string, options?: Omit<ToastOptions, 'type' | 'title'>) =>
     toastStore.add({ ...options, type: 'default', title }),
 
@@ -44,7 +44,7 @@ export const useToast = () => ({
    * Perfect for the "submit → redirect → show success" pattern.
    *
    * @example
-   * const { flash } = useToast()
+   * const { flash } = useSoftToast()
    * await api.save()
    * flash('Saved!', { type: 'success' })
    * router.push('/dashboard')
@@ -64,7 +64,7 @@ export const useToast = () => ({
 
 // ─── Singleton API (usable outside components) ────────────────────────────────
 
-export const toast = {
+export const softToast = {
   default: (title: string, options?: Omit<ToastOptions, 'type' | 'title'>) =>
     toastStore.add({ ...options, type: 'default', title }),
   success: (title: string, options?: Omit<ToastOptions, 'type' | 'title'>) =>

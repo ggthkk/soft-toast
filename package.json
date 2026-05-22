@@ -56,7 +56,7 @@
     "snackbar",
     "alert",
     "composable",
-    "useToast",
+    "useSoftToast",
     "promise-toast",
     "swipe-to-dismiss",
     "spring-animation",
