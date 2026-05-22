@@ -152,18 +152,28 @@ export const morphAnimation = (
   return tl
 }
 
-// Exit: Soft scale down + fade
+// Exit: Soft scale down + fade, then collapse height so the gap closes cleanly
 export const exitAnimation = (
   element: HTMLElement
 ) => {
-  return gsap.to(element, {
-    scale: 0.8,
+  const tl = gsap.timeline()
+  tl.to(element, {
+    scale: 0.85,
     opacity: 0,
     force3D: true,
     overwrite: 'auto',
-    duration: 0.25,
-    ease: 'power2.out'
+    duration: 0.2,
+    ease: 'power2.out',
   })
+  tl.to(element, {
+    height: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    marginBottom: 0,
+    duration: 0.14,
+    ease: 'power2.in',
+  }, '-=0.05')
+  return tl
 }
 
 // Swipe exit: fly off horizontally in the direction of the gesture
@@ -185,6 +195,7 @@ export const swipeExitAnimation = (
 export const swipeSnapBack = (element: HTMLElement) => {
   return gsap.to(element, {
     x: 0,
+    rotate: 0,
     opacity: 1,
     force3D: true,
     overwrite: 'auto',
@@ -217,6 +228,7 @@ export const positionAnimation = (
     opacityStep?: number
     maxVisible?: number
     reposition?: boolean
+    resetSwipe?: boolean
   }
 ) => {
   const {
@@ -231,7 +243,8 @@ export const positionAnimation = (
     scaleStep = 0.055,
     opacityStep = 0.2,
     maxVisible = 3,
-    reposition = false
+    reposition = false,
+    resetSwipe = false
   } = options
 
   const config = presetConfigs[preset] || presetConfigs.smooth
@@ -240,21 +253,23 @@ export const positionAnimation = (
   if (expanded) {
     // Expanded hover and dismiss restacking share one soft settle timing.
     const expandedTarget = {
+      x: resetSwipe ? 0 : undefined,
       y: expandedOffset * sign,
       scale: 1,
-      opacity: 1
+      opacity: 1,
+      rotate: resetSwipe ? 0 : undefined
     }
 
-    if (reposition && spring) {
+    if (reposition && spring && !resetSwipe) {
       return cloudSettleAnimation(element, expandedTarget)
     }
 
     return gsap.to(element, {
       ...expandedTarget,
       force3D: true,
-      overwrite: 'auto',
-      duration: DUR(0.12),
-      ease: 'power2.out'
+      overwrite: true,
+      duration: DUR(resetSwipe ? 0.34 : 0.12),
+      ease: resetSwipe ? 'elastic.out(1, 0.55)' : 'power2.out'
     })
   }
 
@@ -265,6 +280,20 @@ export const positionAnimation = (
   const targetOpacity = isHidden ? 0 : Math.max(0, 1 - clampedIdx * opacityStep)
 
   if (reposition && spring) {
+    if (resetSwipe) {
+      return gsap.to(element, {
+        x: 0,
+        y: targetY,
+        scale: targetScale,
+        opacity: targetOpacity,
+        rotate: 0,
+        force3D: true,
+        overwrite: true,
+        duration: DUR(0.38),
+        ease: 'elastic.out(1, 0.55)'
+      })
+    }
+
     return cloudSettleAnimation(element, {
       y: targetY,
       scale: targetScale,
@@ -276,13 +305,15 @@ export const positionAnimation = (
   // paths above stay softer so hover and dismiss do not feel mismatched.
   const restackEase = spring ? createElasticEase(bounce) : config.ease
   return gsap.to(element, {
+    x: resetSwipe ? 0 : undefined,
     y: targetY,
     scale: targetScale,
     opacity: targetOpacity,
+    rotate: resetSwipe ? 0 : undefined,
     force3D: true,
-    overwrite: 'auto',
-    duration: DUR(config.duration * 0.85),
-    ease: restackEase
+    overwrite: resetSwipe ? true : 'auto',
+    duration: DUR(resetSwipe ? 0.38 : config.duration * 0.85),
+    ease: resetSwipe ? 'elastic.out(1, 0.55)' : restackEase
   })
 }
 

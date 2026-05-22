@@ -13,13 +13,13 @@ export interface ToastAction {
   class?: string
 }
 
-export interface ToastPromiseMessages {
+export interface ToastPromiseMessages<T = unknown> {
   loading: string
-  success: string
-  error: string
+  success: string | ((data: T) => string)
+  error: string | ((err: unknown) => string)
   description?: {
-    success?: string
-    error?: string
+    success?: string | ((data: T) => string)
+    error?: string | ((err: unknown) => string)
   }
   action?: {
     error?: ToastAction

@@ -12,7 +12,6 @@ import {
   positionAnimation,
   killAnimations,
   swipeExitAnimation,
-  swipeSnapBack,
 } from "../animations/gsapConfig";
 import { gsap } from "gsap";
 
@@ -99,7 +98,11 @@ const normalizedActions = computed(() => {
 
 // ─── Stack position via GSAP ─────────────────────────────────────────────────
 
-const applyStackPosition = (reposition = false, overrideOffset?: number) => {
+const applyStackPosition = (
+  reposition = false,
+  overrideOffset?: number,
+  resetSwipe = false,
+) => {
   if (!toastRef.value || props.toast.isLeaving || isSwiping) return;
   positionAnimation(toastRef.value, {
     index: props.index,
@@ -110,6 +113,7 @@ const applyStackPosition = (reposition = false, overrideOffset?: number) => {
     direction: props.stackDirection,
     expandedOffset: overrideOffset ?? props.expandedOffset,
     reposition,
+    resetSwipe,
   });
 };
 
@@ -167,12 +171,8 @@ const resetSwipeTracking = () => {
 
 const snapBackSwipe = () => {
   if (!toastRef.value) return;
-  gsap.set(toastRef.value, { rotate: 0 });
-  swipeSnapBack(toastRef.value);
   if (!props.expanded) toastStore.resume(props.toast.id);
-  // Re-apply the correct stack position in case other toasts expired while
-  // this one was held — isSwiping is already false at this point.
-  nextTick(() => applyStackPosition(true));
+  applyStackPosition(true, undefined, true);
 };
 
 const completeSwipe = () => {
@@ -313,8 +313,10 @@ const handleLostPointerCapture = (e: PointerEvent) => {
   activePointerTarget = null;
   clearLostCaptureFallback();
   lostCaptureFallbackId = window.setTimeout(() => {
-    if (isSwiping) completeSwipe();
-  }, 300);
+    if (!isSwiping) return;
+    resetSwipeTracking();
+    snapBackSwipe();
+  }, 150);
 };
 
 const handleVisibilityChange = () => {

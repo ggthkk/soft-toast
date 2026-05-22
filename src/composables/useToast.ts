@@ -25,7 +25,7 @@ export const useToast = () => ({
 
   promise: <T>(
     promiseFn: Promise<T>,
-    messages: ToastPromiseMessages,
+    messages: ToastPromiseMessages<T>,
     options?: Omit<ToastOptions, 'type' | 'promise' | 'promiseMessages'>
   ): Promise<T> => toastStore.promise(promiseFn, messages, options),
 
@@ -79,7 +79,7 @@ export const toast = {
     toastStore.loading(title, options),
   promise: <T>(
     promiseFn: Promise<T>,
-    messages: ToastPromiseMessages,
+    messages: ToastPromiseMessages<T>,
     options?: Omit<ToastOptions, 'type' | 'promise' | 'promiseMessages'>
   ): Promise<T> => toastStore.promise(promiseFn, messages, options),
   custom: (options: ToastOptions) => toastStore.add(options),

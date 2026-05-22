@@ -1,6 +1,6 @@
 {
   "name": "@soft-toast/vue",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Soft, fluid toast notifications for Vue 3 — part of the @soft-toast family",
   "type": "module",
   "main": "./dist/index.js",
@@ -48,11 +48,24 @@
   "keywords": [
     "vue",
     "vue3",
+    "nuxt",
+    "nuxt3",
+    "nuxt4",
     "toast",
     "notification",
+    "snackbar",
+    "alert",
+    "composable",
+    "useToast",
+    "promise-toast",
+    "swipe-to-dismiss",
+    "spring-animation",
+    "dark-mode",
     "animation",
     "soft",
-    "fluid"
+    "fluid",
+    "vue-toastification-alternative",
+    "vue-sonner-alternative"
   ],
   "author": "",
   "license": "MIT",

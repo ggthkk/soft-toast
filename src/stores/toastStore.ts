@@ -252,7 +252,7 @@ const loading = (title: string, options?: Omit<ToastOptions, 'type' | 'title'>) 
 
 const promise = async <T>(
   promiseFn: Promise<T>,
-  messages: ToastPromiseMessages,
+  messages: ToastPromiseMessages<T>,
   options?: Omit<ToastOptions, 'type' | 'promise' | 'promiseMessages'>
 ): Promise<T> => {
   const id = add({
@@ -266,16 +266,16 @@ const promise = async <T>(
     const result = await promiseFn
     update(id, {
       type: 'success',
-      title: messages.success,
-      description: messages.description?.success,
+      title: typeof messages.success === 'function' ? messages.success(result) : messages.success,
+      description: typeof messages.description?.success === 'function' ? messages.description.success(result) : messages.description?.success,
       duration: 4000,
     })
     return result
   } catch (err) {
     update(id, {
       type: 'error',
-      title: messages.error,
-      description: messages.description?.error,
+      title: typeof messages.error === 'function' ? messages.error(err) : messages.error,
+      description: typeof messages.description?.error === 'function' ? messages.description.error(err) : messages.description?.error,
       action: messages.action?.error,
       duration: 6000,
     })
@@ -312,7 +312,7 @@ export interface ToastStore {
   warning: (title: string, options?: Omit<ToastOptions, 'type' | 'title'>) => string
   info: (title: string, options?: Omit<ToastOptions, 'type' | 'title'>) => string
   loading: (title: string, options?: Omit<ToastOptions, 'type' | 'title'>) => string
-  promise: <T>(promiseFn: Promise<T>, messages: ToastPromiseMessages, options?: Omit<ToastOptions, 'type' | 'promise' | 'promiseMessages'>) => Promise<T>
+  promise: <T>(promiseFn: Promise<T>, messages: ToastPromiseMessages<T>, options?: Omit<ToastOptions, 'type' | 'promise' | 'promiseMessages'>) => Promise<T>
   clearAll: () => void
   remove: (id: string) => void
 }
