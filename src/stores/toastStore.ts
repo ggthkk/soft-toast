@@ -29,6 +29,14 @@ const toasts = ref<Toast[]>([])
 // Non-reactive timer state — lives outside Vue reactivity to avoid per-frame re-renders
 const timerMap = new Map<string, { remainingTime: number; isPaused: boolean }>()
 
+const resetTimer = (id: string, duration: number, isPaused = false) => {
+  if (duration === Infinity) {
+    timerMap.delete(id)
+    return
+  }
+  timerMap.set(id, { remainingTime: duration, isPaused })
+}
+
 // ─── Computed ─────────────────────────────────────────────────────────────────
 
 const getToastsByPosition = (position: ToastPosition) =>
@@ -60,6 +68,7 @@ const add = (options: ToastOptions): string => {
       isPaused: existing.isPaused,
       isLeaving: false,
     }
+    resetTimer(id, options.duration ?? existing.duration, existing.isPaused)
     // Play sound again if configured (content changed)
     const sound = options.sound
     const vol = options.soundVolume ?? 0.5
@@ -86,7 +95,7 @@ const add = (options: ToastOptions): string => {
   }
 
   // Register in non-reactive timer map
-  timerMap.set(id, { remainingTime: duration, isPaused: false })
+  resetTimer(id, duration, false)
 
   toasts.value.unshift(toast)
   startTickLoop()
@@ -102,7 +111,18 @@ const add = (options: ToastOptions): string => {
 const update = (id: string, options: Partial<ToastOptions>) => {
   const index = toasts.value.findIndex((t) => t.id === id)
   if (index !== -1) {
-    toasts.value[index] = { ...toasts.value[index], ...options }
+    const existing = toasts.value[index]
+    const nextDuration = options.duration ?? existing.duration
+    const nextRemainingTime =
+      options.duration === undefined ? existing.remainingTime : nextDuration
+    toasts.value[index] = {
+      ...existing,
+      ...options,
+      remainingTime: nextRemainingTime,
+    }
+    if (options.duration !== undefined) {
+      resetTimer(id, nextDuration, existing.isPaused)
+    }
   }
 }
 

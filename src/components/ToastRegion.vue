@@ -541,7 +541,9 @@ const isSwipeToDismissEnabled = computed(() => props.swipeToDismiss !== false);
               :expanded="isExpanded"
               :expanded-offset="expandedOffsets[toast.id] ?? 0"
               :stack-direction="stackDirection"
-              :interactive="isExpanded || getVisualIndex(toast, idx) === 0"
+              :interactive="
+                !toast.isLeaving && (isExpanded || getVisualIndex(toast, idx) === 0)
+              "
               :close-button="toast.closeButton ?? closeButton"
               :swipe-to-dismiss="isSwipeToDismissEnabled"
               :style="
@@ -564,7 +566,9 @@ const isSwipeToDismissEnabled = computed(() => props.swipeToDismiss !== false);
               :expanded="isExpanded"
               :expanded-offset="expandedOffsets[toast.id] ?? 0"
               :stack-direction="stackDirection"
-              :interactive="isExpanded || getVisualIndex(toast, idx) === 0"
+              :interactive="
+                !toast.isLeaving && (isExpanded || getVisualIndex(toast, idx) === 0)
+              "
               :close-button="toast.closeButton ?? closeButton"
               :swipe-to-dismiss="isSwipeToDismissEnabled"
               :style="

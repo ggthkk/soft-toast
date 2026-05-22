@@ -169,7 +169,10 @@ const snapBackSwipe = () => {
   if (!toastRef.value) return;
   gsap.set(toastRef.value, { rotate: 0 });
   swipeSnapBack(toastRef.value);
-  toastStore.resume(props.toast.id);
+  if (!props.expanded) toastStore.resume(props.toast.id);
+  // Re-apply the correct stack position in case other toasts expired while
+  // this one was held — isSwiping is already false at this point.
+  nextTick(() => applyStackPosition(true));
 };
 
 const completeSwipe = () => {
@@ -203,7 +206,28 @@ const completeSwipe = () => {
 };
 
 const handlePointerDown = (e: PointerEvent) => {
-  if (!isSwipeToDismissEnabled.value || isDismissing || isSwiping) return;
+  // Guard: isSwiping can be left true if lostpointercapture fired but its
+  // 300 ms fallback hasn't resolved yet. If there is no active captured
+  // pointer any more, reset the stale state so the next gesture isn't blocked.
+  if (isSwiping && activePointerId !== null) {
+    try {
+      const el = activePointerTarget ?? (e.currentTarget as HTMLElement);
+      if (!el.hasPointerCapture(activePointerId)) {
+        resetSwipeTracking();
+        snapBackSwipe();
+      }
+    } catch {
+      resetSwipeTracking();
+    }
+  }
+  if (
+    !isSwipeToDismissEnabled.value ||
+    isDismissing ||
+    isSwiping ||
+    props.toast.isLeaving
+  ) {
+    return;
+  }
   // Only primary button for mouse; all pointers for touch/stylus
   if (e.pointerType === "mouse" && e.button !== 0) return;
   // Ignore if target is a button/link (don't hijack action clicks)
@@ -350,14 +374,19 @@ watch(
   () => props.expanded,
   (expanded) => {
     if (expanded) toastStore.pause(props.toast.id);
-    else toastStore.resume(props.toast.id);
+    else if (!isSwiping && !props.toast.isLeaving) {
+      toastStore.resume(props.toast.id);
+    }
   },
 );
 
 watch(
   () => props.toast.isLeaving,
   (leaving) => {
-    if (leaving) dismiss();
+    if (leaving) {
+      if (isSwiping) resetSwipeTracking();
+      dismiss();
+    }
   },
 );
 

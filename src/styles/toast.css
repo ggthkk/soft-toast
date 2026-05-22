@@ -59,6 +59,11 @@
   touch-action: none;
 }
 
+.soft-toast-item[data-leaving="true"] {
+  pointer-events: none;
+  touch-action: none;
+}
+
 /* Show grab cursor on swipeable toasts to hint at the gesture */
 .soft-toast-item--swipeable {
   cursor: grab;
