@@ -290,7 +290,8 @@ app.use(SoftToastPlugin, { autoMount: false });
 </SoftToastContainer>
 ```
 
-Use `slotFilter` to apply custom slots only to specific toasts. Toasts that don't match keep the default rendering:
+By default, the slots above apply to every toast rendered by that container.
+Use `slotFilter` only when you want custom slots for some toasts while the others keep the default rendering:
 
 ```vue
 <SoftToastContainer :slot-filter="(toast) => toast.id.startsWith('custom-')">

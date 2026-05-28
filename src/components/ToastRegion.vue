@@ -315,39 +315,6 @@ const clampAndApplyScroll = (deltaY: number, animate = true) => {
 const handleWheel = (e: WheelEvent) => {
   if (!isExpanded.value) return;
 
-  // Check if the scroll originated from inside a scrollable element (like a long description)
-  let target = e.target as HTMLElement | null;
-  let isInternalScroll = false;
-
-  while (target && target !== stackRef.value) {
-    const style = window.getComputedStyle(target);
-    const overflowY = style.overflowY;
-
-    // Check if the element is capable of vertical scrolling
-    if (overflowY === "auto" || overflowY === "scroll") {
-      // It is a scrollable container. Check if it actually has overflow
-      if (target.scrollHeight > target.clientHeight) {
-        // Check if we can scroll in the direction of the wheel
-        // (deltaY > 0 is scrolling down, deltaY < 0 is scrolling up)
-        const canScrollDown =
-          Math.ceil(target.scrollTop + target.clientHeight) <
-          target.scrollHeight;
-        const canScrollUp = target.scrollTop > 0;
-
-        if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
-          isInternalScroll = true;
-          break; // It's a valid internal scroll, stop checking parents
-        }
-      }
-    }
-    target = target.parentElement;
-  }
-
-  if (isInternalScroll) {
-    // Don't intercept the wheel event; let the internal scrollbar handle it
-    return;
-  }
-
   // If we don't need to scroll the main stack, don't prevent default so page can scroll normally
   const maxScrollNeeded = Math.max(
     0,

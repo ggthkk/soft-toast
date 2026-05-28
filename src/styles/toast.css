@@ -191,23 +191,9 @@
   color: #4b5563;
   margin: 4px 0 0;
   line-height: 1.5;
-  max-height: 120px;
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
   padding-right: 4px;
-  scrollbar-width: none;
-}
-
-/* Custom Scrollbar for long descriptions — hidden by default, shown on hover */
-.soft-toast-description::-webkit-scrollbar { width: 0; }
-.soft-toast-item:hover .soft-toast-description { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.15) transparent; }
-.soft-toast-item:hover .soft-toast-description::-webkit-scrollbar { width: 4px; }
-.soft-toast-item:hover .soft-toast-description::-webkit-scrollbar-track { background: transparent; }
-.soft-toast-item:hover .soft-toast-description::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 4px;
-}
-.soft-toast-item:hover .soft-toast-description::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
 }
 
 /* Timestamp — lives BELOW all content, never overlaps close button */
