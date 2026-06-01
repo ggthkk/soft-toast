@@ -14,6 +14,7 @@ export type {
   ToastType,
   ToastPosition,
   ToastOptions,
+  ToastRenderContext,
   ToastAction,
   ToastPromiseMessages,
   ToastClassNames,

@@ -1,4 +1,4 @@
-import type { VNode, Component } from 'vue'
+import type { VNode, VNodeChild, Component } from 'vue'
 
 export type ToastType = 'default' | 'success' | 'error' | 'warning' | 'info' | 'promise'
 export type ToastPosition = 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'
@@ -26,12 +26,22 @@ export interface ToastPromiseMessages<T = unknown> {
   }
 }
 
+export interface ToastRenderContext {
+  toast: Toast
+  dismiss: () => void
+  execute: (action: ToastAction) => void | Promise<void>
+  hasSucceeded: boolean
+}
+
 export interface ToastOptions {
   id?: string
   type?: ToastType
   title?: string
   description?: string | VNode
   action?: ToastAction | ToastAction[]
+  component?: Component
+  props?: Record<string, unknown>
+  render?: (context: ToastRenderContext) => VNodeChild
   icon?: string | VNode | Component
   duration?: number
   position?: ToastPosition
@@ -50,6 +60,7 @@ export interface ToastOptions {
   soundVolume?: number       // 0–1, default 0.5
   onDismiss?: (id: string) => void
   onAutoClose?: (id: string) => void
+  meta?: Record<string, unknown>
   promise?: Promise<unknown>
   promiseMessages?: ToastPromiseMessages
 }
@@ -69,6 +80,9 @@ export interface Toast extends Required<Pick<ToastOptions, 'id' | 'type' | 'dura
   title?: string
   description?: string | VNode
   action?: ToastAction | ToastAction[]
+  component?: Component
+  props?: Record<string, unknown>
+  render?: (context: ToastRenderContext) => VNodeChild
   icon?: string | VNode | Component
   classNames?: ToastClassNames
   fillColor?: string
@@ -82,6 +96,7 @@ export interface Toast extends Required<Pick<ToastOptions, 'id' | 'type' | 'dura
   isPaused: boolean
   isExpanded: boolean
   isLeaving: boolean
+  meta?: Record<string, unknown>
   promise?: Promise<unknown>
   promiseMessages?: ToastPromiseMessages
   onDismiss?: (id: string) => void

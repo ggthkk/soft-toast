@@ -135,7 +135,7 @@ softToast.error("Session expired", { duration: 6000 });
 | `toast.info(title, options?)`      | Info toast                                            |
 | `toast.loading(title, options?)`   | Persistent loading toast (use `update` to resolve it) |
 | `toast.promise(promise, messages)` | Auto-transitions loading → success / error            |
-| `toast.custom(options)`            | Full control — pass any `ToastOptions` directly       |
+| `toast.custom(options)`            | Full control, including custom Vue component content  |
 | `toast.update(id, options)`        | Update a visible toast by ID                          |
 | `toast.dismiss(id?)`               | Dismiss one toast by ID, or all toasts if omitted     |
 | `toast.dismissAll()`               | Dismiss all visible toasts                            |
@@ -182,6 +182,9 @@ toast.update(id, {
 | `duration`      | `number`                                       | `4000`        | Auto-close delay in ms (`Infinity` disables auto-close)   |
 | `description`   | `string \| VNode`                              | `undefined`   | Secondary text below the title                            |
 | `action`        | `ToastAction \| ToastAction[]`                 | `undefined`   | One or more action buttons                                |
+| `component`     | `Component`                                    | `undefined`   | Render a custom Vue component inside this toast           |
+| `props`         | `Record<string, unknown>`                      | `{}`           | Props passed to `component`                               |
+| `render`        | `(context) => VNodeChild`                      | `undefined`   | Advanced custom render function                           |
 | `icon`          | `string \| VNode \| Component`                 | `undefined`   | Iconify icon string, VNode, or Vue component              |
 | `preset`        | `'smooth' \| 'bouncy' \| 'subtle' \| 'snappy'` | `'smooth'`    | Motion style                                              |
 | `showProgress`  | `boolean`                                      | `false`       | Decreasing progress bar                                   |
@@ -249,9 +252,82 @@ onMounted(() => toast.showFlashes());
 
 Flash messages expire automatically after 30 seconds if not consumed.
 
+## Custom Component Toasts
+
+Use this when one toast needs its own Vue component, usually after fetching data in a feature component.
+You do not need to disable `autoMount` or place a custom container for this pattern.
+
+```vue
+<!-- UserInviteToast.vue -->
+<script setup lang="ts">
+defineProps<{
+  user: { name: string; role: string; avatar: string };
+  dismiss: () => void;
+}>();
+</script>
+
+<template>
+  <div class="user-toast">
+    <img :src="user.avatar" alt="" />
+    <div>
+      <strong>{{ user.name }}</strong>
+      <p>{{ user.role }} joined the project</p>
+      <button @click="dismiss">View profile</button>
+    </div>
+  </div>
+</template>
+```
+
+```vue
+<!-- Any feature component -->
+<script setup lang="ts">
+import { useSoftToast } from "@soft-toast/vue";
+import UserInviteToast from "./UserInviteToast.vue";
+
+const toast = useSoftToast();
+
+const showUserToast = async () => {
+  const user = await fetchUser();
+
+  toast.custom({
+    component: UserInviteToast,
+    props: { user },
+    duration: 8000,
+    closeButton: true,
+    showProgress: true,
+  });
+};
+</script>
+
+<template>
+  <button @click="showUserToast">Show user toast</button>
+</template>
+```
+
+Custom components automatically receive these extra props:
+
+| Prop           | Description                                      |
+| -------------- | ------------------------------------------------ |
+| `toast`        | The full toast object                            |
+| `dismiss`      | Dismiss this toast                               |
+| `execute`      | Run one of the toast's configured action objects |
+| `hasSucceeded` | `true` after an async action succeeds            |
+
+For advanced cases, use a render function:
+
+```typescript
+import { h } from "vue";
+import UserInviteToast from "./UserInviteToast.vue";
+
+toast.custom({
+  render: ({ dismiss }) => h(UserInviteToast, { user, dismiss }),
+});
+```
+
 ## Custom Slots
 
-Override any part of the toast UI via named slots on `<SoftToastContainer>`.
+Use slots when you want to restyle the toast layout globally or for a group of toasts.
+For one-off custom content from a feature component, prefer `toast.custom({ component, props })`.
 
 When using slots, disable the plugin's auto-mounted container and place it manually in your layout:
 
@@ -294,7 +370,11 @@ By default, the slots above apply to every toast rendered by that container.
 Use `slotFilter` only when you want custom slots for some toasts while the others keep the default rendering:
 
 ```vue
-<SoftToastContainer :slot-filter="(toast) => toast.id.startsWith('custom-')">
+<!-- Mark toasts that should use custom slots -->
+softToast.info('Hello', { meta: { useCustomSlots: true } })
+
+<!-- Then filter by meta in the container -->
+<SoftToastContainer :slot-filter="(toast) => toast.meta?.useCustomSlots">
   <template #title="{ toast }">
     <strong>{{ toast.title }}</strong>
   </template>

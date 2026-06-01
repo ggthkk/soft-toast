@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  watch,
+  nextTick,
+  defineComponent,
+} from "vue";
 import type { Toast } from "../types";
 import { toastStore } from "../stores/toastStore";
 import { Icon } from "@iconify/vue";
@@ -94,6 +102,28 @@ const normalizedActions = computed(() => {
   return Array.isArray(props.toast.action)
     ? props.toast.action
     : [props.toast.action];
+});
+
+const customToastProps = computed(() => ({
+  ...(props.toast.props ?? {}),
+  toast: props.toast,
+  dismiss,
+  execute: handleAction,
+  hasSucceeded: hasActionSucceeded.value,
+}));
+
+const customRenderComponent = computed(() => {
+  if (!props.toast.render) return null;
+  return defineComponent({
+    name: "SoftToastRenderContent",
+    setup: () => () =>
+      props.toast.render?.({
+        toast: props.toast,
+        dismiss,
+        execute: handleAction,
+        hasSucceeded: hasActionSucceeded.value,
+      }),
+  });
 });
 
 // ─── Stack position via GSAP ─────────────────────────────────────────────────
@@ -464,6 +494,19 @@ onUnmounted(() => {
     </slot>
 
     <div class="soft-toast-content">
+      <div
+        v-if="toast.component || customRenderComponent"
+        class="soft-toast-custom-content"
+      >
+        <component
+          v-if="toast.component"
+          :is="toast.component"
+          v-bind="customToastProps"
+        />
+        <component v-else-if="customRenderComponent" :is="customRenderComponent" />
+      </div>
+
+      <template v-else>
       <slot name="icon" :toast="toast" :close-button="closeButton">
         <div v-if="toast.type === 'promise'" class="soft-toast-icon">
           <Icon
@@ -554,6 +597,7 @@ onUnmounted(() => {
           {{ formattedTime }}
         </span>
       </div>
+      </template>
     </div>
 
     <ToastProgress

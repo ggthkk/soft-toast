@@ -162,6 +162,11 @@
   min-width: 0;
 }
 
+.soft-toast-custom-content {
+  flex: 1;
+  min-width: 0;
+}
+
 .soft-toast-header-row {
   display: flex;
   align-items: center;
