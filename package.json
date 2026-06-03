@@ -1,6 +1,6 @@
 {
   "name": "@soft-toast/vue",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Soft, fluid toast notifications for Vue 3 — part of the @soft-toast family",
   "type": "module",
   "main": "./dist/index.js",
