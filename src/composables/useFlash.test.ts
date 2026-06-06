@@ -1,10 +1,3 @@
-/**
- * Tests for the Flash Message system (useFlash.ts)
- *
- * Flash messages survive page navigation via sessionStorage.
- * We install a Map-backed sessionStorage mock before each test so
- * the functions run in a browser-like environment even under Bun/Node.
- */
 import { describe, it, expect, beforeEach, afterAll } from 'bun:test'
 import { toastStore } from '../stores/toastStore'
 
@@ -25,9 +18,9 @@ const createMockSessionStorage = () => {
 
 const mockStorage = createMockSessionStorage()
 
-// Install mock BEFORE importing useFlash so that typeof checks inside
-// the module functions find a defined sessionStorage.
-;(globalThis as Record<string, unknown>).sessionStorage = mockStorage
+  // Install mock BEFORE importing useFlash so that typeof checks inside
+  // the module functions find a defined sessionStorage.
+  ; (globalThis as Record<string, unknown>).sessionStorage = mockStorage
 
 // Now import — functions will see the mock when called.
 // Dynamic import resolves after the globalThis assignment above.
