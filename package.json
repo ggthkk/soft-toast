@@ -22,8 +22,8 @@
     "src"
   ],
   "scripts": {
-    "build": "bun run build.ts",
-    "typecheck": "tsc --noEmit",
+    "build": "node build.js",
+    "typecheck": "vue-tsc --noEmit",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "prepublishOnly": "bun run build"

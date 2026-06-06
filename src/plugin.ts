@@ -1,4 +1,4 @@
-import { createApp, h, type App } from 'vue'
+import { createApp, h, type App, type Plugin } from 'vue'
 import type { ToastPluginOptions } from './types'
 import ToastContainer from './components/ToastContainer.vue'
 import './styles/toast.css'
@@ -26,11 +26,11 @@ let pluginOptions: ToastPluginOptions = {
 // Flag to check if container is mounted
 let isContainerMounted = false
 
-export const SoftToastPlugin = {
-  install(app: App, options: ToastPluginOptions = {}) {
+export const SoftToastPlugin: Plugin<[options?: ToastPluginOptions]> = {
+  install(app: App<any>, options: ToastPluginOptions = {}) {
     // Merge options
     pluginOptions = { ...pluginOptions, ...options }
-    
+
     app.component('SoftToastContainer', ToastContainer)
 
     // Only mount container once
@@ -38,13 +38,13 @@ export const SoftToastPlugin = {
       // Create a container div
       const containerId = 'soft-toast-global-container'
       let container = document.getElementById(containerId)
-      
+
       if (!container) {
         container = document.createElement('div')
         container.id = containerId
         document.body.appendChild(container)
       }
-      
+
       // Create a mini-app instance just for the toast container
       const toastContainerApp = createApp({
         render: () => h(ToastContainer, {
@@ -67,14 +67,14 @@ export const SoftToastPlugin = {
           slotFilter: pluginOptions.slotFilter
         })
       })
-      
+
       toastContainerApp.mount(container)
       isContainerMounted = true
     }
-    
+
     // Provide options to all components
     app.provide('softToastOptions', pluginOptions)
-    
+
     // Set theme attribute on body
     if (typeof document !== 'undefined') {
       document.body.setAttribute('data-soft-toast-theme', pluginOptions.theme || 'light')
