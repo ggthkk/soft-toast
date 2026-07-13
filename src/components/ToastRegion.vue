@@ -19,7 +19,7 @@ const props = withDefaults(defineProps<ToastContainerProps>(), {
   closeButton: false,
   showProgress: false,
   showTimestamp: false,
-  maxQueue: Infinity,
+  maxQueue: 10,
   queueOverflow: "drop-oldest",
   dir: "ltr",
   swipeToDismiss: true,
@@ -133,6 +133,18 @@ watch(
   },
 );
 
+// Sync queue cap + default sound volume to the singleton store (Hybrid:
+// prop drives store so softToast.* used outside components honours the
+// same limits).
+watch(
+  () => [props.maxQueue, props.queueOverflow, props.soundVolume] as const,
+  ([max, overflow, vol]) => {
+    toastStore.setMaxQueue(max ?? Infinity, overflow ?? "drop-oldest");
+    if (vol !== undefined) toastStore.setDefaultSoundVolume(vol);
+  },
+  { immediate: true },
+);
+
 // Position classes
 const positionClass = computed(() => `soft-toast-container--${props.position}`);
 const isCenterAligned = computed(() => props.position.endsWith("-center"));
@@ -228,7 +240,7 @@ const _doMeasureOffsets = (forceSync = false) => {
     }
   }
 
-  // Build id → offset map instead of positional array
+  // Build id â†’ offset map instead of positional array
   const offsetMap: Record<string, number> = {};
   for (let i = 0; i < items.length; i++) {
     const toastId = items[i].dataset.toastId;
@@ -247,7 +259,7 @@ const _doMeasureOffsets = (forceSync = false) => {
     clampAndApplyScroll(0); // Applies bounds check without adding new delta
   }
 
-  // Sync list height via GSAP — instant set (no tween) when called from measure
+  // Sync list height via GSAP â€” instant set (no tween) when called from measure
   if (listRef.value && changed) {
     const target = isExpanded.value ? totalHeight.value : frontHeight.value;
     gsap.set(listRef.value, { height: target });

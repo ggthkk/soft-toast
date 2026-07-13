@@ -9,7 +9,7 @@ import {
   defineComponent,
 } from "vue";
 import type { Toast } from "../types";
-import { toastStore } from "../stores/toastStore";
+import { toastStore, EXIT_REMOVE_DELAY_MS } from "../stores/toastStore";
 import { Icon } from "@iconify/vue";
 import ToastIcon from "./ToastIcon.vue";
 import ToastProgress from "./ToastProgress.vue";
@@ -77,7 +77,7 @@ const dismiss = () => {
   removeFallbackId = window.setTimeout(() => {
     toastStore.remove(toastId);
     removeFallbackId = null;
-  }, 320);
+  }, EXIT_REMOVE_DELAY_MS);
   exitAnimation(toastRef.value);
 };
 
@@ -226,7 +226,7 @@ const completeSwipe = () => {
     removeFallbackId = window.setTimeout(() => {
       toastStore.remove(toastId);
       removeFallbackId = null;
-    }, 320);
+    }, EXIT_REMOVE_DELAY_MS);
     const flyX = dx > 0 ? width * 1.6 : -width * 1.6;
     swipeExitAnimation(toastRef.value, flyX);
   } else {

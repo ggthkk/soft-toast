@@ -183,7 +183,7 @@ toast.update(id, {
 | `description`   | `string \| VNode`                              | `undefined`   | Secondary text below the title                            |
 | `action`        | `ToastAction \| ToastAction[]`                 | `undefined`   | One or more action buttons                                |
 | `component`     | `Component`                                    | `undefined`   | Render a custom Vue component inside this toast           |
-| `props`         | `Record<string, unknown>`                      | `{}`           | Props passed to `component`                               |
+| `props`         | `Record<string, unknown>`                      | `{}`          | Props passed to `component`                               |
 | `render`        | `(context) => VNodeChild`                      | `undefined`   | Advanced custom render function                           |
 | `icon`          | `string \| VNode \| Component`                 | `undefined`   | Iconify icon string, VNode, or Vue component              |
 | `preset`        | `'smooth' \| 'bouncy' \| 'subtle' \| 'snappy'` | `'smooth'`    | Motion style                                              |
@@ -394,7 +394,7 @@ softToast.info('Hello', { meta: { useCustomSlots: true } })
 | `showTimestamp`  | `boolean`                                      | `false`         | Show timestamp on all toasts                         |
 | `closeOnEscape`  | `boolean`                                      | `true`          | Dismiss the most recent toast on `Escape`            |
 | `swipeToDismiss` | `boolean`                                      | `true`          | Enable swipe-to-dismiss gesture                      |
-| `maxQueue`       | `number`                                       | `Infinity`      | Maximum number of toasts visible at once             |
+| `maxQueue`       | `number`                                       | `10`            | Maximum number of toasts visible at once             |
 | `queueOverflow`  | `'drop-oldest' \| 'drop-newest'`               | `'drop-oldest'` | What to drop when queue is full                      |
 | `gap`            | `number`                                       | `12`            | Gap in px between expanded toasts                    |
 | `offset`         | `number \| string`                             | `'24px'`        | Distance from the screen edge                        |
