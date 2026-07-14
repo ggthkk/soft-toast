@@ -56,23 +56,11 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 };
 
-// Pause all timers when tab is hidden, resume when visible again
-const handleVisibilityChange = () => {
-  const toasts = positionToasts.value;
-  if (document.hidden) {
-    toasts.forEach((t) => toastStore.pause(t.id));
-  } else {
-    toasts.forEach((t) => toastStore.resume(t.id));
-  }
-};
-
 onMounted(() => {
   if (props.closeOnEscape) {
     document.addEventListener("keydown", handleKeydown);
   }
 
-  // Pause all timers when user switches tab / window loses focus
-  document.addEventListener("visibilitychange", handleVisibilityChange);
   // iOS: collapse expanded stack when tapping outside
   document.addEventListener("touchstart", handleOutsideTap, { passive: true });
 
@@ -94,7 +82,6 @@ onUnmounted(() => {
   if (props.closeOnEscape) {
     document.removeEventListener("keydown", handleKeydown);
   }
-  document.removeEventListener("visibilitychange", handleVisibilityChange);
   document.removeEventListener("touchstart", handleOutsideTap);
   stackRef.value?.removeEventListener("touchmove", handleStackTouchMove);
   if (listResizeObserver) listResizeObserver.disconnect();
@@ -103,9 +90,15 @@ onUnmounted(() => {
   observedItems = new WeakSet<HTMLElement>();
 });
 
-// Re-measure when toast list changes or when a toast starts leaving
+// Re-measure when the toast list changes or a toast starts leaving.
+// Track length + leaving-count instead of building a `${id}:${isLeaving}`
+// string for every toast on every dependency change (was O(n) string work
+// each tick — expensive when the stack is large).
 watch(
-  () => positionToasts.value.map((t) => `${t.id}:${t.isLeaving}`).join(","),
+  () => [
+    positionToasts.value.length,
+    positionToasts.value.reduce((n, t) => (t.isLeaving ? n + 1 : n), 0),
+  ] as const,
   () => {
     nextTick(measureOffsets);
   },
@@ -133,29 +126,26 @@ watch(
   },
 );
 
-// Sync queue cap + default sound volume to the singleton store (Hybrid:
-// prop drives store so softToast.* used outside components honours the
-// same limits).
-watch(
-  () => [props.maxQueue, props.queueOverflow, props.soundVolume] as const,
-  ([max, overflow, vol]) => {
-    toastStore.setMaxQueue(max ?? Infinity, overflow ?? "drop-oldest");
-    if (vol !== undefined) toastStore.setDefaultSoundVolume(vol);
-  },
-  { immediate: true },
-);
-
 // Position classes
 const positionClass = computed(() => `soft-toast-container--${props.position}`);
 const isCenterAligned = computed(() => props.position.endsWith("-center"));
 
-// Visual Indexing (ignore leaving toasts so the stack closes gaps instantly)
+// Visual Indexing (ignore leaving toasts so the stack closes gaps instantly).
+// Build an id → visual-index Map once per activeToasts change so template
+// lookups are O(1) instead of O(n) findIndex per toast (was O(n²) per render).
 const activeToasts = computed(() =>
   positionToasts.value.filter((t) => !t.isLeaving),
 );
+const activeIndexById = computed(() => {
+  const map = new Map<string, number>();
+  for (let i = 0; i < activeToasts.value.length; i++) {
+    map.set(activeToasts.value[i].id, i);
+  }
+  return map;
+});
 const getVisualIndex = (toast: any, realIdx: number) => {
   if (toast.isLeaving) return realIdx; // Keep its place while animating out
-  return activeToasts.value.findIndex((t) => t.id === toast.id);
+  return activeIndexById.value.get(toast.id) ?? -1;
 };
 
 // Stack expansion (hover or focus reveals the stack)
@@ -171,10 +161,15 @@ const clearCollapseTimer = () => {
 // DOM cap: keep a bounded, stable window mounted so expanding does not
 // introduce new nodes mid-animation. Collapsed positioning still hides items
 // after the front 3 via opacity/pointer-events.
-const EXPANDED_DOM_CAP = 15;
+// Derive from maxQueue (clamped to at least 15) so the render window never
+// silently diverges from the queue cap — a hard-coded 15 used to mask the cap
+// being unimplemented.
+const expandedDomCap = computed(() =>
+  Math.max(15, Number.isFinite(props.maxQueue) ? (props.maxQueue ?? 15) : 15),
+);
 const renderedToasts = computed(() => {
   const all = positionToasts.value;
-  const windowed = all.slice(0, EXPANDED_DOM_CAP);
+  const windowed = all.slice(0, expandedDomCap.value);
   // Keep leaving toasts so their exit animation plays even if they fall
   // outside the normal render window.
   const leaving = all.filter((t) => t.isLeaving);

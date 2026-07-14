@@ -206,4 +206,73 @@ describe("toastStore — maxQueue cap", () => {
     // Newest two survive
     expect(toastStore.toasts.value.map((t) => t.id)).toEqual(["t4", "t3"]);
   });
+
+  it("B3: does not drop loading/promise toasts (duration: Infinity) over cap", () => {
+    toastStore.setMaxQueue(2);
+    // Two protected loading toasts fill the cap.
+    toastStore.add({ id: "load1", title: "Loading 1", duration: Infinity });
+    toastStore.add({ id: "load2", title: "Loading 2", duration: Infinity });
+    // A normal toast arrives — it should still be admitted, but the loading
+    // toasts must not be dropped (otherwise the promise update would no-op).
+    toastStore.add({ id: "norm", title: "Normal", duration: 4000 });
+    const ids = toastStore.toasts.value.map((t) => t.id);
+    expect(ids).toContain("load1");
+    expect(ids).toContain("load2");
+    expect(ids).toContain("norm");
+  });
+
+  it("B3: drops oldest NON-protected toasts first when protected fill the cap", () => {
+    toastStore.setMaxQueue(2);
+    toastStore.add({ id: "load", title: "Loading", duration: Infinity });
+    // Three normal toasts + one protected. cap=2 counts ONLY normal toasts,
+    // so the OLDEST normal toast (n1) is dropped, never the loading one.
+    toastStore.add({ id: "n1", title: "n1", duration: 4000 });
+    toastStore.add({ id: "n2", title: "n2", duration: 4000 });
+    toastStore.add({ id: "n3", title: "n3", duration: 4000 });
+    const ids = toastStore.toasts.value.map((t) => t.id);
+    expect(ids).toContain("load");
+    expect(ids).toContain("n3");
+    expect(ids).toContain("n2");
+    // n1 (oldest non-protected) was dropped to make room.
+    expect(ids).not.toContain("n1");
+  });
+});
+
+// ─── dismiss race conditions ──────────────────────────────────────────────────
+
+describe("toastStore — dismiss race conditions", () => {
+  beforeEach(() => {
+    toastStore.clearAll();
+    toastStore.setMaxQueue(Infinity, "drop-oldest");
+  });
+
+  it("B2: dismissAll does not wipe toasts added during the exit window", () => {
+    toastStore.add({ id: "a", title: "a" });
+    toastStore.add({ id: "b", title: "b" });
+    toastStore.dismiss(); // start dismissAll — setTimeout filter queued
+    // A new toast arrives DURING the 400ms exit window.
+    toastStore.add({ id: "c", title: "c" });
+    // The new toast must survive — only a and b were captured for dismissal.
+    expect(toastStore.toasts.value.map((t) => t.id)).toContain("c");
+    // a and b are still in the array (just leaving) during the window.
+    expect(toastStore.toasts.value.some((t) => t.id === "a")).toBe(true);
+    expect(toastStore.toasts.value.some((t) => t.id === "b")).toBe(true);
+  });
+
+  it("B2: dismiss-by-type does not wipe same-type toasts added during exit window", () => {
+    toastStore.add({ id: "e1", title: "e1", type: "error" });
+    toastStore.add({ id: "s1", title: "s1", type: "success" });
+    toastStore.dismiss({ type: "error" }); // queue filter for error type
+    // New error toast arrives during the exit window — must NOT be wiped.
+    toastStore.add({ id: "e2", title: "e2", type: "error" });
+    const ids = toastStore.toasts.value.map((t) => t.id);
+    expect(ids).toContain("e2");
+    expect(ids).toContain("s1");
+    // e1 was captured for dismissal (still leaving during the window).
+    expect(toastStore.toasts.value.some((t) => t.id === "e1")).toBe(true);
+    // The leaving e1 must not be counted as active for the cap.
+    expect(
+      toastStore.toasts.value.filter((t) => !t.isLeaving).map((t) => t.id),
+    ).toEqual(["e2", "s1"]);
+  });
 });

@@ -434,6 +434,9 @@ onUnmounted(() => {
     window.clearTimeout(removeFallbackId);
     removeFallbackId = null;
   }
+  // Also clear the lost-pointer-capture fallback timer — it can outlive the
+  // toast if dismiss fires before the 150ms window elapses.
+  clearLostCaptureFallback();
   if (toastRef.value) killAnimations(toastRef.value);
 });
 </script>
@@ -503,100 +506,103 @@ onUnmounted(() => {
           :is="toast.component"
           v-bind="customToastProps"
         />
-        <component v-else-if="customRenderComponent" :is="customRenderComponent" />
+        <component
+          v-else-if="customRenderComponent"
+          :is="customRenderComponent"
+        />
       </div>
 
       <template v-else>
-      <slot name="icon" :toast="toast" :close-button="closeButton">
-        <div v-if="toast.type === 'promise'" class="soft-toast-icon">
-          <Icon
-            class="soft-toast-icon-svg"
-            icon="lucide:loader-circle"
-            :width="18"
-            :height="18"
+        <slot name="icon" :toast="toast" :close-button="closeButton">
+          <div v-if="toast.type === 'promise'" class="soft-toast-icon">
+            <Icon
+              class="soft-toast-icon-svg"
+              icon="lucide:loader-circle"
+              :width="18"
+              :height="18"
+            />
+          </div>
+          <ToastIcon
+            v-else-if="toast.icon && typeof toast.icon === 'string'"
+            :type="toast.type"
+            :customIcon="toast.icon"
           />
-        </div>
-        <ToastIcon
-          v-else-if="toast.icon && typeof toast.icon === 'string'"
-          :type="toast.type"
-          :customIcon="toast.icon"
-        />
-        <div v-else-if="toast.icon" class="soft-toast-icon">
-          <component :is="toast.icon" />
-        </div>
-        <ToastIcon v-else-if="toast.type !== 'default'" :type="toast.type" />
-      </slot>
+          <div v-else-if="toast.icon" class="soft-toast-icon">
+            <component :is="toast.icon" />
+          </div>
+          <ToastIcon v-else-if="toast.type !== 'default'" :type="toast.type" />
+        </slot>
 
-      <div class="soft-toast-body">
-        <div class="soft-toast-header-row">
-          <slot name="title" :toast="toast" :close-button="closeButton">
-            <p
-              class="soft-toast-title"
-              :class="{
-                'soft-toast-title--has-close':
-                  closeButton === true || closeButton === 'top-right',
-              }"
-            >
-              {{ toast.title }}
-            </p>
-          </slot>
-        </div>
+        <div class="soft-toast-body">
+          <div class="soft-toast-header-row">
+            <slot name="title" :toast="toast" :close-button="closeButton">
+              <p
+                class="soft-toast-title"
+                :class="{
+                  'soft-toast-title--has-close':
+                    closeButton === true || closeButton === 'top-right',
+                }"
+              >
+                {{ toast.title }}
+              </p>
+            </slot>
+          </div>
 
-        <div
-          v-if="toast.description || toast.action"
-          class="soft-toast-extra"
-          style="overflow: hidden"
-        >
-          <slot name="description" :toast="toast" :close-button="closeButton">
-            <p v-if="toast.description" class="soft-toast-description">
-              <component
-                v-if="typeof toast.description === 'object'"
-                :is="toast.description"
-              />
-              <template v-else>{{ toast.description }}</template>
-            </p>
-          </slot>
-
-          <slot
-            name="action"
-            :toast="toast"
-            :execute="handleAction"
-            :hasSucceeded="hasActionSucceeded"
-            :close-button="closeButton"
+          <div
+            v-if="toast.description || toast.action"
+            class="soft-toast-extra"
+            style="overflow: hidden"
           >
-            <div
-              v-if="normalizedActions.length > 0 && !hasActionSucceeded"
-              class="soft-toast-action"
-            >
-              <button
-                v-for="(act, idx) in normalizedActions"
-                :key="idx"
-                class="soft-toast-action-button"
-                :class="[
-                  act.class || '',
-                  act.primary ? 'soft-toast-action-primary' : '',
-                ]"
-                @click.stop="() => handleAction(act)"
-              >
-                {{ act.label }}
-              </button>
-            </div>
-            <div v-else-if="hasActionSucceeded" class="soft-toast-action">
-              <span
-                class="soft-toast-action-button soft-toast-action-success"
-                style="opacity: 0.75; cursor: default"
-              >
-                {{ successLabelStr }}
-              </span>
-            </div>
-          </slot>
-        </div>
+            <slot name="description" :toast="toast" :close-button="closeButton">
+              <p v-if="toast.description" class="soft-toast-description">
+                <component
+                  v-if="typeof toast.description === 'object'"
+                  :is="toast.description"
+                />
+                <template v-else>{{ toast.description }}</template>
+              </p>
+            </slot>
 
-        <!-- Timestamp lives below all content — never overlaps close button -->
-        <span v-if="toast.showTimestamp" class="soft-toast-timestamp">
-          {{ formattedTime }}
-        </span>
-      </div>
+            <slot
+              name="action"
+              :toast="toast"
+              :execute="handleAction"
+              :hasSucceeded="hasActionSucceeded"
+              :close-button="closeButton"
+            >
+              <div
+                v-if="normalizedActions.length > 0 && !hasActionSucceeded"
+                class="soft-toast-action"
+              >
+                <button
+                  v-for="(act, idx) in normalizedActions"
+                  :key="idx"
+                  class="soft-toast-action-button"
+                  :class="[
+                    act.class || '',
+                    act.primary ? 'soft-toast-action-primary' : '',
+                  ]"
+                  @click.stop="() => handleAction(act)"
+                >
+                  {{ act.label }}
+                </button>
+              </div>
+              <div v-else-if="hasActionSucceeded" class="soft-toast-action">
+                <span
+                  class="soft-toast-action-button soft-toast-action-success"
+                  style="opacity: 0.75; cursor: default"
+                >
+                  {{ successLabelStr }}
+                </span>
+              </div>
+            </slot>
+          </div>
+
+          <!-- Timestamp lives below all content — never overlaps close button -->
+          <span v-if="toast.showTimestamp" class="soft-toast-timestamp">
+            {{ formattedTime }}
+          </span>
+        </div>
       </template>
     </div>
 

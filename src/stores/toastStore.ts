@@ -58,6 +58,13 @@ const timerMap = new Map<
   { toast: Toast; remainingTime: number; isPaused: boolean }
 >();
 
+// id → Toast reference index. Kept in sync with toasts.value so pause/resume/
+// expand/collapse/dismiss-by-id can find a toast in O(1) instead of scanning
+// the array (was O(n) per call → O(n²) when the visibility handler pauses
+// every toast on tab-hide). Note: the index holds the CURRENT toast object —
+// callers that replace a toast in place (add/dedup, update) must refresh it.
+const toastIndex = new Map<string, Toast>();
+
 const resetTimer = (
   id: string,
   toast: Toast,
@@ -82,24 +89,39 @@ const enforceCap = () => {
   const max = queueCap.max;
   if (!Number.isFinite(max) || max <= 0) return;
 
-  // Collect active (non-leaving) ids in array order: index 0 = newest.
-  const activeIds: string[] = [];
+  // Capped toasts = active (non-leaving) AND NOT protected.
+  // Loading/promise toasts use duration = Infinity and are PROTECTED from
+  // the cap entirely — they do NOT count toward maxQueue and can NEVER be
+  // dropped here. Reason: they are transient (a promise will resolve/reject
+  // and the same toast object flips back to a normal finite duration), and
+  // dropping one would make the subsequent update() call a no-op (findIndex
+  // returns -1) so the user would silently never see the promise result.
+  // Normal toasts therefore share the cap among themselves, independent of
+  // any loading toasts that happen to be on screen at the same time.
+  const cappedIds: string[] = [];
   for (const t of toasts.value) {
-    if (!t.isLeaving) activeIds.push(t.id);
+    if (t.isLeaving) continue;
+    if (t.duration === Infinity) continue; // protected: not counted, not droppable
+    cappedIds.push(t.id);
   }
 
-  const overflow = activeIds.length - max;
+  const overflow = cappedIds.length - max;
   if (overflow <= 0) return;
 
-  // drop-oldest → drop the tail of the array (oldest inserts, deepest in stack).
-  // drop-newest → drop the head of the array (newest inserts, including the one just added).
+  // drop-oldest → drop the tail of the capped list (oldest inserts, deepest
+  //   in stack).
+  // drop-newest → drop the head of the capped list (newest inserts,
+  //   including the one just added).
   const idsToDrop =
     queueCap.overflow === "drop-newest"
-      ? activeIds.slice(0, overflow)
-      : activeIds.slice(-overflow);
+      ? cappedIds.slice(0, overflow)
+      : cappedIds.slice(-overflow);
 
   const dropSet = new Set(idsToDrop);
-  for (const id of dropSet) timerMap.delete(id);
+  for (const id of dropSet) {
+    timerMap.delete(id);
+    toastIndex.delete(id);
+  }
   toasts.value = toasts.value.filter((t) => !dropSet.has(t.id));
 };
 
@@ -148,9 +170,10 @@ const add = (options: ToastOptions): string => {
   const id = options.id || generateId();
 
   // ── Smart Dedup: same id already exists → update instead of creating ──
-  const existingIndex = toasts.value.findIndex((t) => t.id === id);
-  if (existingIndex !== -1 && !toasts.value[existingIndex].isLeaving) {
-    const existing = toasts.value[existingIndex];
+  // O(1) lookup via toastIndex instead of findIndex over the array.
+  const existing = toastIndex.get(id);
+  if (existing && !existing.isLeaving) {
+    const existingIndex = toasts.value.indexOf(existing);
     // Patch the existing toast with new content
     toasts.value[existingIndex] = {
       ...existing,
@@ -161,7 +184,9 @@ const add = (options: ToastOptions): string => {
       isPaused: existing.isPaused,
       isLeaving: false,
     };
-    // Pass the new toast object so timerMap never keeps a stale ref after dedup.
+    // Refresh the index + timerMap with the new toast object (in-place
+    // replace above created a new reference).
+    toastIndex.set(id, toasts.value[existingIndex]);
     resetTimer(id, toasts.value[existingIndex], options.duration ?? existing.duration, existing.isPaused);
     // Play sound again if configured (content changed)
     const sound = options.sound;
@@ -188,9 +213,10 @@ const add = (options: ToastOptions): string => {
     showProgress: options.showProgress ?? defaultOptions.showProgress,
   };
 
-  // Insert first, then register the timer with the same toast reference so the
-  // RAF loop can read toast fields via the map in O(1).
+  // Insert first, then register the timer + index with the same toast reference
+  // so the RAF loop and pause/resume can read toast fields in O(1).
   toasts.value.unshift(toast);
+  toastIndex.set(id, toast);
   resetTimer(id, toast, duration, false);
   enforceCap();
   startTickLoop();
@@ -198,7 +224,7 @@ const add = (options: ToastOptions): string => {
   // Only play sound if the toast survived the cap (drop-newest may remove it).
   const sound = options.sound;
   if (sound) {
-    const survived = toasts.value.some((t) => t.id === id);
+    const survived = toastIndex.has(id);
     if (survived) {
       const vol = options.soundVolume ?? defaultSoundVolume;
       playToastSound(toast.type, sound, vol);
@@ -209,62 +235,81 @@ const add = (options: ToastOptions): string => {
 };
 
 const update = (id: string, options: Partial<ToastOptions>) => {
-  const index = toasts.value.findIndex((t) => t.id === id);
-  if (index !== -1) {
-    const existing = toasts.value[index];
-    const nextDuration = options.duration ?? existing.duration;
-    const nextRemainingTime =
-      options.duration === undefined ? existing.remainingTime : nextDuration;
-    toasts.value[index] = {
-      ...existing,
-      ...options,
-      remainingTime: nextRemainingTime,
-    };
-    if (options.duration !== undefined) {
-      // Duration changed → full reset (also refreshes the stored toast ref).
-      resetTimer(id, toasts.value[index], nextDuration, existing.isPaused);
-    } else {
-      // No duration change → still update the stored ref so the RAF loop does
-      // not read a stale toast object after the spread above replaced it.
-      const timer = timerMap.get(id);
-      if (timer) timer.toast = toasts.value[index];
-    }
+  const existing = toastIndex.get(id);
+  if (!existing) return;
+  const index = toasts.value.indexOf(existing);
+  if (index === -1) return;
+  const nextDuration = options.duration ?? existing.duration;
+  const nextRemainingTime =
+    options.duration === undefined ? existing.remainingTime : nextDuration;
+  toasts.value[index] = {
+    ...existing,
+    ...options,
+    remainingTime: nextRemainingTime,
+  };
+  // Refresh the index so future lookups see the new toast object.
+  toastIndex.set(id, toasts.value[index]);
+  if (options.duration !== undefined) {
+    // Duration changed → full reset (also refreshes the stored toast ref).
+    resetTimer(id, toasts.value[index], nextDuration, existing.isPaused);
+  } else {
+    // No duration change → still update the stored ref so the RAF loop does
+    // not read a stale toast object after the spread above replaced it.
+    const timer = timerMap.get(id);
+    if (timer) timer.toast = toasts.value[index];
   }
 };
 
 const dismiss = (id?: string | { type?: ToastType | ToastType[] }) => {
   if (!id) {
+    // Capture the exact ids being dismissed now. The setTimeout filter must
+    // only remove THESE ids — any toast added during the exit animation window
+    // must survive (otherwise dismissAll() would wipe freshly added toasts).
+    const idsToDismiss = new Set<string>();
     toasts.value.forEach((t) => {
+      idsToDismiss.add(t.id);
       t.isLeaving = true;
     });
     timerMap.clear();
     setTimeout(() => {
-      toasts.value = [];
+      toasts.value = toasts.value.filter((t) => !idsToDismiss.has(t.id));
+      for (const id2 of idsToDismiss) toastIndex.delete(id2);
     }, EXIT_REMOVE_DELAY_MS);
     return;
   }
 
   if (typeof id === "string") {
-    const toast = toasts.value.find((t) => t.id === id);
-    if (toast) {
+    const toast = toastIndex.get(id);
+    if (toast && !toast.isLeaving) {
       toast.isLeaving = true;
       toast.onDismiss?.(id);
       timerMap.delete(id);
       setTimeout(() => {
-        toasts.value = toasts.value.filter((t) => t.id !== id);
+        // O(1) lookup + O(n) splice once instead of O(n) find + O(n) filter.
+        const t = toastIndex.get(id);
+        if (t) {
+          const idx = toasts.value.indexOf(t);
+          if (idx !== -1) toasts.value.splice(idx, 1);
+        }
+        toastIndex.delete(id);
       }, EXIT_REMOVE_DELAY_MS);
     }
   } else {
     const types = Array.isArray(id.type) ? id.type : [id.type];
+    // Capture ids of toasts that match the type NOW. Toasts added later with
+    // the same type during the 400ms exit window must NOT be wiped.
+    const idsToDismiss = new Set<string>();
     toasts.value.forEach((t) => {
       if (types.includes(t.type)) {
+        idsToDismiss.add(t.id);
         t.isLeaving = true;
         t.onDismiss?.(t.id);
         timerMap.delete(t.id);
       }
     });
     setTimeout(() => {
-      toasts.value = toasts.value.filter((t) => !types.includes(t.type));
+      toasts.value = toasts.value.filter((t) => !idsToDismiss.has(t.id));
+      for (const id2 of idsToDismiss) toastIndex.delete(id2);
     }, EXIT_REMOVE_DELAY_MS);
   }
 };
@@ -272,24 +317,27 @@ const dismiss = (id?: string | { type?: ToastType | ToastType[] }) => {
 const pause = (id: string) => {
   const timer = timerMap.get(id);
   if (timer) timer.isPaused = true;
-  const toast = toasts.value.find((t) => t.id === id);
+  const toast = toastIndex.get(id);
   if (toast) toast.isPaused = true;
 };
 
 const resume = (id: string) => {
   const timer = timerMap.get(id);
   if (timer) timer.isPaused = false;
-  const toast = toasts.value.find((t) => t.id === id);
+  const toast = toastIndex.get(id);
   if (toast) toast.isPaused = false;
+  // P1: the RAF loop may have stopped itself when every timer was paused. A
+  // resume means there is now work to do again — kick the loop back on.
+  startTickLoop();
 };
 
 const expand = (id: string) => {
-  const toast = toasts.value.find((t) => t.id === id);
+  const toast = toastIndex.get(id);
   if (toast) toast.isExpanded = true;
 };
 
 const collapse = (id: string) => {
-  const toast = toasts.value.find((t) => t.id === id);
+  const toast = toastIndex.get(id);
   if (toast) toast.isExpanded = false;
 };
 
@@ -298,13 +346,48 @@ const collapse = (id: string) => {
 let lastTime = 0;
 let rafId: number | null = null;
 
+// P4: clamp per-frame delta so a long-hidden tab (browser throttles RAF to
+// ~1Hz) does not blow away every toast the moment the tab becomes visible
+// again. 100ms is the smallest interval at which a user still perceives
+// smooth countdown — anything larger would let timers drift visibly.
+const MAX_FRAME_DELTA_MS = 100;
+
+// Returns true if at least one timer is currently ticking (not paused, not
+// for an Infinity-duration toast). The RAF loop uses this to decide whether
+// to keep running: if every toast is paused or loading, we can sleep instead
+// of spinning 60fps doing nothing (P1 — saves battery on mobile).
+const hasActiveTimer = () => {
+  for (const timer of timerMap.values()) {
+    if (!timer.isPaused && timer.toast && !timer.toast.isLeaving) return true;
+  }
+  return false;
+};
+
+const stopTickLoop = () => {
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
+  lastTime = 0;
+};
+
+// P3: cancel the RAF when the page is hidden/unloaded so we never leak a
+// scheduled frame across a tab close or bfcache restore.
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", stopTickLoop, { once: true });
+}
+
 const startTickLoop = () => {
   if (rafId !== null) return;
   if (typeof window === "undefined") return;
+  // P1: do not spin a frame if there is nothing to tick (every toast is
+  // paused or loading). The next add()/resume() will restart the loop.
+  if (!hasActiveTimer()) return;
 
   const loop = (currentTime: number) => {
     if (lastTime === 0) lastTime = currentTime;
-    const delta = currentTime - lastTime;
+    // P4: clamp delta — protects against huge jumps after tab visibility.
+    const delta = Math.min(currentTime - lastTime, MAX_FRAME_DELTA_MS);
     lastTime = currentTime;
 
     // Tick non-reactive timer map — zero Vue reactivity cost per frame.
@@ -330,12 +413,21 @@ const startTickLoop = () => {
         toast.isLeaving = true;
         toast.onAutoClose?.(id);
         setTimeout(() => {
-          toasts.value = toasts.value.filter((t) => t.id !== id);
+          // O(1) lookup via toastIndex + O(n) splice once.
+          const t = toastIndex.get(id);
+          if (t) {
+            const idx = toasts.value.indexOf(t);
+            if (idx !== -1) toasts.value.splice(idx, 1);
+          }
+          toastIndex.delete(id);
         }, EXIT_REMOVE_DELAY_MS);
       }
     }
 
-    if (toasts.value.length > 0) {
+    // P1: keep the loop alive only while there is at least one active timer.
+    // Previously this checked toasts.value.length, which kept the RAF spinning
+    // even when every toast was paused or had duration = Infinity (loading).
+    if (hasActiveTimer()) {
       rafId = requestAnimationFrame(loop);
     } else {
       rafId = null;
@@ -416,11 +508,13 @@ const promise = async <T>(
 
 const clearAll = () => {
   timerMap.clear();
+  toastIndex.clear();
   toasts.value = [];
 };
 
 const remove = (id: string) => {
   timerMap.delete(id);
+  toastIndex.delete(id);
   toasts.value = toasts.value.filter((t) => t.id !== id);
 };
 
