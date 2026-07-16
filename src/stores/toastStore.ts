@@ -65,6 +65,18 @@ const timerMap = new Map<
 // callers that replace a toast in place (add/dedup, update) must refresh it.
 const toastIndex = new Map<string, Toast>();
 
+// Remove exactly one toast generation. Public IDs are reusable, so delayed
+// cleanup must not resolve an ID again after a newer toast may have claimed it.
+const removeToastInstance = (toast: Toast) => {
+  const timer = timerMap.get(toast.id);
+  if (timer?.toast === toast) timerMap.delete(toast.id);
+
+  if (toastIndex.get(toast.id) === toast) toastIndex.delete(toast.id);
+
+  const index = toasts.value.indexOf(toast);
+  if (index !== -1) toasts.value.splice(index, 1);
+};
+
 const resetTimer = (
   id: string,
   toast: Toast,
@@ -196,6 +208,10 @@ const add = (options: ToastOptions): string => {
   }
 
   // ── New toast ──
+  // Reusing a public ID during exit must not leave two Vue nodes with the
+  // same key. Remove the old generation before mounting its replacement.
+  if (existing?.isLeaving) removeToastInstance(existing);
+
   const duration = options.duration ?? defaultOptions.duration;
   const toast: Toast = {
     ...defaultOptions,
@@ -262,18 +278,17 @@ const update = (id: string, options: Partial<ToastOptions>) => {
 
 const dismiss = (id?: string | { type?: ToastType | ToastType[] }) => {
   if (!id) {
-    // Capture the exact ids being dismissed now. The setTimeout filter must
-    // only remove THESE ids — any toast added during the exit animation window
-    // must survive (otherwise dismissAll() would wipe freshly added toasts).
-    const idsToDismiss = new Set<string>();
-    toasts.value.forEach((t) => {
-      idsToDismiss.add(t.id);
+    // Capture exact object generations so toasts added during the exit window,
+    // including replacements with reused public IDs, survive cleanup.
+    const toastsToDismiss = toasts.value.filter((t) => !t.isLeaving);
+    toastsToDismiss.forEach((t) => {
       t.isLeaving = true;
+      t.onDismiss?.(t.id);
+      const timer = timerMap.get(t.id);
+      if (timer?.toast === t) timerMap.delete(t.id);
     });
-    timerMap.clear();
     setTimeout(() => {
-      toasts.value = toasts.value.filter((t) => !idsToDismiss.has(t.id));
-      for (const id2 of idsToDismiss) toastIndex.delete(id2);
+      toastsToDismiss.forEach(removeToastInstance);
     }, EXIT_REMOVE_DELAY_MS);
     return;
   }
@@ -283,33 +298,27 @@ const dismiss = (id?: string | { type?: ToastType | ToastType[] }) => {
     if (toast && !toast.isLeaving) {
       toast.isLeaving = true;
       toast.onDismiss?.(id);
-      timerMap.delete(id);
+      const timer = timerMap.get(id);
+      if (timer?.toast === toast) timerMap.delete(id);
       setTimeout(() => {
-        // O(1) lookup + O(n) splice once instead of O(n) find + O(n) filter.
-        const t = toastIndex.get(id);
-        if (t) {
-          const idx = toasts.value.indexOf(t);
-          if (idx !== -1) toasts.value.splice(idx, 1);
-        }
-        toastIndex.delete(id);
+        removeToastInstance(toast);
       }, EXIT_REMOVE_DELAY_MS);
     }
   } else {
     const types = Array.isArray(id.type) ? id.type : [id.type];
-    // Capture ids of toasts that match the type NOW. Toasts added later with
-    // the same type during the 400ms exit window must NOT be wiped.
-    const idsToDismiss = new Set<string>();
-    toasts.value.forEach((t) => {
-      if (types.includes(t.type)) {
-        idsToDismiss.add(t.id);
-        t.isLeaving = true;
-        t.onDismiss?.(t.id);
-        timerMap.delete(t.id);
-      }
+    // Capture only the matching generations that exist now. Later same-type
+    // toasts must not be wiped when this exit window completes.
+    const toastsToDismiss = toasts.value.filter(
+      (t) => !t.isLeaving && types.includes(t.type),
+    );
+    toastsToDismiss.forEach((t) => {
+      t.isLeaving = true;
+      t.onDismiss?.(t.id);
+      const timer = timerMap.get(t.id);
+      if (timer?.toast === t) timerMap.delete(t.id);
     });
     setTimeout(() => {
-      toasts.value = toasts.value.filter((t) => !idsToDismiss.has(t.id));
-      for (const id2 of idsToDismiss) toastIndex.delete(id2);
+      toastsToDismiss.forEach(removeToastInstance);
     }, EXIT_REMOVE_DELAY_MS);
   }
 };
@@ -413,13 +422,7 @@ const startTickLoop = () => {
         toast.isLeaving = true;
         toast.onAutoClose?.(id);
         setTimeout(() => {
-          // O(1) lookup via toastIndex + O(n) splice once.
-          const t = toastIndex.get(id);
-          if (t) {
-            const idx = toasts.value.indexOf(t);
-            if (idx !== -1) toasts.value.splice(idx, 1);
-          }
-          toastIndex.delete(id);
+          removeToastInstance(toast);
         }, EXIT_REMOVE_DELAY_MS);
       }
     }
@@ -512,10 +515,9 @@ const clearAll = () => {
   toasts.value = [];
 };
 
-const remove = (id: string) => {
-  timerMap.delete(id);
-  toastIndex.delete(id);
-  toasts.value = toasts.value.filter((t) => t.id !== id);
+const remove = (target: string | Toast) => {
+  const toast = typeof target === "string" ? toastIndex.get(target) : target;
+  if (toast) removeToastInstance(toast);
 };
 
 // ─── Store interface + export ─────────────────────────────────────────────────
@@ -558,7 +560,7 @@ export interface ToastStore {
     options?: Omit<ToastOptions, "type" | "promise" | "promiseMessages">,
   ) => Promise<T>;
   clearAll: () => void;
-  remove: (id: string) => void;
+  remove: (target: string | Toast) => void;
 }
 
 export const toastStore: ToastStore = {

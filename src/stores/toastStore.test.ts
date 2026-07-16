@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { toastStore } from "./toastStore";
 
+const waitForExitCleanup = () =>
+  new Promise((resolve) => setTimeout(resolve, 425));
+
 describe("toastStore", () => {
   beforeEach(() => {
     toastStore.clearAll();
@@ -116,13 +119,14 @@ describe("toastStore — smart deduplication", () => {
     expect(toastStore.toasts.value[0].remainingTime).toBe(4000);
   });
 
-  it("dedup skips a toast that is already leaving (creates new one)", () => {
+  it("replaces a leaving toast before reusing its public id", () => {
     toastStore.add({ id: "leaving-id", title: "Leaving" });
     toastStore.toasts.value[0].isLeaving = true;
 
     toastStore.add({ id: "leaving-id", title: "New one" });
-    // The original (leaving) toast stays + a new one is added
-    expect(toastStore.toasts.value.length).toBe(2);
+    expect(toastStore.toasts.value).toHaveLength(1);
+    expect(toastStore.toasts.value[0].title).toBe("New one");
+    expect(toastStore.toasts.value[0].isLeaving).toBe(false);
   });
 
   it("returned id is the same when dedup update occurs", () => {
@@ -246,7 +250,7 @@ describe("toastStore — dismiss race conditions", () => {
     toastStore.setMaxQueue(Infinity, "drop-oldest");
   });
 
-  it("B2: dismissAll does not wipe toasts added during the exit window", () => {
+  it("dismissAll does not wipe a different-id toast after exit cleanup", async () => {
     toastStore.add({ id: "a", title: "a" });
     toastStore.add({ id: "b", title: "b" });
     toastStore.dismiss(); // start dismissAll — setTimeout filter queued
@@ -257,9 +261,11 @@ describe("toastStore — dismiss race conditions", () => {
     // a and b are still in the array (just leaving) during the window.
     expect(toastStore.toasts.value.some((t) => t.id === "a")).toBe(true);
     expect(toastStore.toasts.value.some((t) => t.id === "b")).toBe(true);
+    await waitForExitCleanup();
+    expect(toastStore.toasts.value.map((t) => t.id)).toEqual(["c"]);
   });
 
-  it("B2: dismiss-by-type does not wipe same-type toasts added during exit window", () => {
+  it("dismiss-by-type does not wipe a same-type toast after exit cleanup", async () => {
     toastStore.add({ id: "e1", title: "e1", type: "error" });
     toastStore.add({ id: "s1", title: "s1", type: "success" });
     toastStore.dismiss({ type: "error" }); // queue filter for error type
@@ -274,5 +280,70 @@ describe("toastStore — dismiss race conditions", () => {
     expect(
       toastStore.toasts.value.filter((t) => !t.isLeaving).map((t) => t.id),
     ).toEqual(["e2", "s1"]);
+    await waitForExitCleanup();
+    expect(toastStore.toasts.value.map((t) => t.id)).toEqual(["e2", "s1"]);
+  });
+
+  it("dismissAll cannot delete a replacement with the same public id", async () => {
+    toastStore.add({ id: "save", title: "old" });
+    toastStore.dismiss();
+    toastStore.add({ id: "save", title: "new" });
+
+    await waitForExitCleanup();
+    expect(toastStore.toasts.value).toHaveLength(1);
+    expect(toastStore.toasts.value[0].title).toBe("new");
+    expect(toastStore.toasts.value[0].isLeaving).toBe(false);
+  });
+
+  it("dismiss-by-id cannot delete a replacement with the same public id", async () => {
+    toastStore.add({ id: "save", title: "old" });
+    toastStore.dismiss("save");
+    toastStore.add({ id: "save", title: "new" });
+
+    await waitForExitCleanup();
+    expect(toastStore.toasts.value).toHaveLength(1);
+    expect(toastStore.toasts.value[0].title).toBe("new");
+    expect(toastStore.toasts.value[0].isLeaving).toBe(false);
+  });
+
+  it("stale instance cleanup cannot delete a same-id replacement", () => {
+    toastStore.add({ id: "swipe", title: "old" });
+    const oldToast = toastStore.toasts.value[0];
+    toastStore.dismiss("swipe");
+    toastStore.add({ id: "swipe", title: "new" });
+
+    toastStore.remove(oldToast);
+
+    expect(toastStore.toasts.value).toHaveLength(1);
+    expect(toastStore.toasts.value[0].title).toBe("new");
+  });
+
+  it("dismiss-by-type cannot delete a same-id replacement", async () => {
+    toastStore.add({ id: "network", title: "old", type: "error" });
+    toastStore.dismiss({ type: "error" });
+    toastStore.add({ id: "network", title: "new", type: "error" });
+
+    await waitForExitCleanup();
+    expect(toastStore.toasts.value).toHaveLength(1);
+    expect(toastStore.toasts.value[0].title).toBe("new");
+  });
+
+  it("dismissAll calls onDismiss once for every active toast", () => {
+    const dismissed: string[] = [];
+    toastStore.add({
+      id: "a",
+      title: "a",
+      onDismiss: (id) => dismissed.push(id),
+    });
+    toastStore.add({
+      id: "b",
+      title: "b",
+      onDismiss: (id) => dismissed.push(id),
+    });
+
+    toastStore.dismiss();
+    toastStore.dismiss();
+
+    expect(dismissed).toEqual(["b", "a"]);
   });
 });

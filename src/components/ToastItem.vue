@@ -9,7 +9,7 @@ import {
   defineComponent,
 } from "vue";
 import type { Toast } from "../types";
-import { toastStore, EXIT_REMOVE_DELAY_MS } from "../stores/toastStore";
+import { toastStore } from "../stores/toastStore";
 import { Icon } from "@iconify/vue";
 import ToastIcon from "./ToastIcon.vue";
 import ToastProgress from "./ToastProgress.vue";
@@ -66,18 +66,9 @@ const isSwipeToDismissEnabled = computed(() => props.swipeToDismiss !== false);
 
 const dismiss = () => {
   if (isDismissing || !toastRef.value) return;
-  const toastId = props.toast.id;
-  const wasLeaving = props.toast.isLeaving;
+  const toast = props.toast;
+  if (!toast.isLeaving) toastStore.dismiss(toast.id);
   isDismissing = true;
-  props.toast.isLeaving = true;
-  if (!wasLeaving) props.toast.onDismiss?.(toastId);
-  if (removeFallbackId !== null) {
-    window.clearTimeout(removeFallbackId);
-  }
-  removeFallbackId = window.setTimeout(() => {
-    toastStore.remove(toastId);
-    removeFallbackId = null;
-  }, EXIT_REMOVE_DELAY_MS);
   exitAnimation(toastRef.value);
 };
 
@@ -164,7 +155,6 @@ let swipeCurrentX = 0;
 let activePointerId: number | null = null;
 let activePointerTarget: HTMLElement | null = null;
 let lostCaptureFallbackId: number | null = null;
-let removeFallbackId: number | null = null;
 
 const clearLostCaptureFallback = () => {
   if (lostCaptureFallbackId === null) return;
@@ -219,14 +209,7 @@ const completeSwipe = () => {
     // --- Dismiss: fly off in swipe direction ---
     isDismissing = true;
     const toastId = props.toast.id;
-    props.toast.isLeaving = true;
-    if (removeFallbackId !== null) {
-      window.clearTimeout(removeFallbackId);
-    }
-    removeFallbackId = window.setTimeout(() => {
-      toastStore.remove(toastId);
-      removeFallbackId = null;
-    }, EXIT_REMOVE_DELAY_MS);
+    toastStore.dismiss(toastId);
     const flyX = dx > 0 ? width * 1.6 : -width * 1.6;
     swipeExitAnimation(toastRef.value, flyX);
   } else {
@@ -429,10 +412,6 @@ onUnmounted(() => {
   if (isSwiping) {
     resetSwipeTracking();
     toastStore.resume(props.toast.id);
-  }
-  if (removeFallbackId !== null) {
-    window.clearTimeout(removeFallbackId);
-    removeFallbackId = null;
   }
   // Also clear the lost-pointer-capture fallback timer — it can outlive the
   // toast if dismiss fires before the 150ms window elapses.

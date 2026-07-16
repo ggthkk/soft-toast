@@ -145,6 +145,14 @@ softToast.error("Session expired", { duration: 6000 });
 | `toast.showFlashes()`              | Consume and show pending flash messages               |
 | `toast.hasFlashes()`               | Returns `true` if there are pending flash messages    |
 
+### Dismissal behavior
+
+Toast IDs can be reused immediately after `dismiss(id)` or `dismissAll()`.
+If a replacement toast uses the same public `id` while the previous toast is
+still animating out, the replacement remains visible and owns its own timer.
+Manual dismissal callbacks run once per dismissed toast, including
+`dismissAll()`.
+
 ### `promise` example
 
 ```typescript
