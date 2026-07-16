@@ -71,7 +71,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ggthkk/soft-toast"
+    "url": "git+https://github.com/ggthkk/soft-toast.git"
   },
   "homepage": "https://soft-toast.netlify.app",
   "bugs": {
