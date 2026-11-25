@@ -1,11 +1,11 @@
 import { createApp, h, type App, type Plugin } from "vue";
 import type { ToastPluginOptions } from "./types";
 import ToastContainer from "./components/ToastContainer.vue";
-import { toastStore } from "./stores/toastStore";
+import { setToastDefaults, toastStore } from "./stores/toastStore";
 import "./styles/toast.css";
 
 // Global state for plugin options
-let pluginOptions: ToastPluginOptions = {
+const pluginDefaults: ToastPluginOptions = {
   position: "top-right",
   duration: 4000,
   theme: "light",
@@ -26,13 +26,17 @@ let pluginOptions: ToastPluginOptions = {
   autoMount: true,
 };
 
+let pluginOptions = { ...pluginDefaults };
+
 // Flag to check if container is mounted
 let isContainerMounted = false;
 
 export const SoftToastPlugin: Plugin<[options?: ToastPluginOptions]> = {
   install(app: App<any>, options: ToastPluginOptions = {}) {
     // Merge options
-    pluginOptions = { ...pluginOptions, ...options };
+    pluginOptions = { ...pluginDefaults, ...options };
+
+    setToastDefaults(options);
 
     // Sync queue cap to the singleton store so softToast.* (used outside
     // components) and the container props enforce the same limit.
@@ -65,10 +69,14 @@ export const SoftToastPlugin: Plugin<[options?: ToastPluginOptions]> = {
         render: () =>
           h(ToastContainer, {
             position: pluginOptions.position,
-            duration: pluginOptions.duration,
+            duration: options.duration,
             gap: pluginOptions.gap,
             offset: pluginOptions.offset,
             theme: pluginOptions.theme,
+            motion: pluginOptions.motion,
+            sound: pluginOptions.sound,
+            soundVolume: pluginOptions.soundVolume,
+            toastOptions: pluginOptions.toastOptions,
             spring: pluginOptions.spring,
             bounce: pluginOptions.bounce,
             preset: pluginOptions.preset,
@@ -90,6 +98,7 @@ export const SoftToastPlugin: Plugin<[options?: ToastPluginOptions]> = {
 
     // Provide options to all components
     app.provide("softToastOptions", pluginOptions);
+    app.provide("softToastDefaults", options);
 
     // Set theme attribute on body
     if (typeof document !== "undefined") {

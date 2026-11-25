@@ -8,7 +8,7 @@ import {
   nextTick,
   defineComponent,
 } from "vue";
-import type { Toast } from "../types";
+import type { Toast, ToastClassNames } from "../types";
 import { toastStore } from "../stores/toastStore";
 import { Icon } from "@iconify/vue";
 import ToastIcon from "./ToastIcon.vue";
@@ -16,6 +16,7 @@ import ToastProgress from "./ToastProgress.vue";
 import { registerToastIcons } from "../icons";
 import {
   landingAnimation,
+  reduceToastMotion,
   exitAnimation,
   positionAnimation,
   killAnimations,
@@ -27,6 +28,7 @@ registerToastIcons();
 
 interface Props {
   toast: Toast;
+  defaultClasses?: ToastClassNames;
   closeButton?: boolean | "top-left" | "top-right";
   swipeToDismiss?: boolean;
   index?: number;
@@ -54,6 +56,8 @@ const toastRef = ref<HTMLElement | null>(null);
 const hasActionSucceeded = ref(false);
 const successLabelStr = ref("");
 let isDismissing = false;
+
+const classes = computed(() => ({ ...props.defaultClasses, ...props.toast.classNames }));
 
 const formattedTime = computed(() => {
   const date = new Date(props.toast.createdAt);
@@ -152,6 +156,8 @@ let swipeStartTime = 0;
 let isSwiping = false;
 let directionLocked = false;
 let swipeCurrentX = 0;
+let swipeWidth = 1;
+let swipeFrame: number | null = null;
 let activePointerId: number | null = null;
 let activePointerTarget: HTMLElement | null = null;
 let lostCaptureFallbackId: number | null = null;
@@ -180,6 +186,8 @@ const removeSwipeFallbackListeners = () => {
 };
 
 const resetSwipeTracking = () => {
+  if (swipeFrame !== null) cancelAnimationFrame(swipeFrame);
+  swipeFrame = null;
   isSwiping = false;
   directionLocked = false;
   clearLostCaptureFallback();
@@ -201,8 +209,12 @@ const completeSwipe = () => {
   const dx = swipeCurrentX;
   const elapsed = Math.max(1, Date.now() - swipeStartTime);
   const velocity = (Math.abs(dx) / elapsed) * 1000; // px/s
-  const width = toastRef.value.offsetWidth;
-  const threshold = width * 0.35;
+  const threshold = swipeWidth * 0.35;
+  // Start the release animation at the last sampled position even between frames.
+  if (swipeFrame !== null) {
+    cancelAnimationFrame(swipeFrame);
+    drawSwipe();
+  }
   resetSwipeTracking();
 
   if (Math.abs(dx) >= threshold || velocity >= 500) {
@@ -210,7 +222,7 @@ const completeSwipe = () => {
     isDismissing = true;
     const toastId = props.toast.id;
     toastStore.dismiss(toastId);
-    const flyX = dx > 0 ? width * 1.6 : -width * 1.6;
+    const flyX = dx > 0 ? swipeWidth * 1.6 : -swipeWidth * 1.6;
     swipeExitAnimation(toastRef.value, flyX);
   } else {
     // --- Snap back with spring ---
@@ -255,6 +267,7 @@ const handlePointerDown = (e: PointerEvent) => {
   swipeCurrentX = 0;
   activePointerId = e.pointerId;
   activePointerTarget = e.currentTarget as HTMLElement;
+  swipeWidth = Math.max(1, activePointerTarget.offsetWidth);
   gsap.killTweensOf(toastRef.value);
 
   // Capture pointer so move/up fire even if cursor leaves the element
@@ -269,6 +282,15 @@ const handlePointerDown = (e: PointerEvent) => {
 
   // Pause timer while swiping
   toastStore.pause(props.toast.id);
+};
+
+const drawSwipe = () => {
+  swipeFrame = null;
+  if (!isSwiping || !toastRef.value) return;
+  const dx = swipeCurrentX;
+  const opacity = Math.max(0, 1 - Math.abs(dx) / (swipeWidth * 0.7));
+  const rotate = (dx / swipeWidth) * 6;
+  gsap.set(toastRef.value, { x: dx, opacity, rotate, overwrite: "auto" });
 };
 
 const handlePointerMove = (e: PointerEvent) => {
@@ -297,13 +319,7 @@ const handlePointerMove = (e: PointerEvent) => {
   e.preventDefault();
   swipeCurrentX = dx;
 
-  // Clamp opacity: full at 0, gone at 70% of width
-  const width = toastRef.value.offsetWidth;
-  const opacity = Math.max(0, 1 - Math.abs(dx) / (width * 0.7));
-  // Slight vertical tilt for realism
-  const rotate = (dx / width) * 6; // max ±6deg
-
-  gsap.set(toastRef.value, { x: dx, opacity, rotate, overwrite: "auto" });
+  if (swipeFrame === null) swipeFrame = requestAnimationFrame(drawSwipe);
 };
 
 const handlePointerUp = (e: PointerEvent) => {
@@ -344,6 +360,10 @@ const handleVisibilityChange = () => {
 onMounted(() => {
   document.addEventListener("visibilitychange", handleVisibilityChange);
   if (!toastRef.value) return;
+  if (reduceToastMotion(toastRef.value)) {
+    applyStackPosition();
+    return;
+  }
   const isBottom = props.toast.position.includes("bottom");
   const tl = landingAnimation(toastRef.value, {
     preset: props.toast.preset,
@@ -377,11 +397,7 @@ watch(
 watch(
   () => props.expanded,
   (expanded) => {
-    if (!expanded) {
-      // Collapse: animate immediately back to stacked position
-      applyStackPosition(true);
-    }
-    // Expand: ToastRegion calls applyStackPosition directly after measuring
+    applyStackPosition(!expanded);
   },
 );
 
@@ -405,8 +421,6 @@ watch(
   },
 );
 
-defineExpose({ applyStackPosition });
-
 onUnmounted(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   if (isSwiping) {
@@ -424,13 +438,18 @@ onUnmounted(() => {
   <div
     ref="toastRef"
     class="soft-toast-item"
-    :class="{ 'soft-toast-item--swipeable': isSwipeToDismissEnabled }"
+    :class="[classes.wrapper, { 'soft-toast-item--swipeable': isSwipeToDismissEnabled }]"
     :data-type="toast.type"
     :data-st-index="index"
     :data-toast-id="toast.id"
     :data-leaving="toast.isLeaving"
     :data-interactive="interactive"
-    :style="{ zIndex: 1000 - index }"
+    :style="{
+      zIndex: 1000 - index,
+      '--st-accent': toast.fillColor,
+      borderColor: toast.borderColor,
+      borderWidth: toast.borderWidth === undefined ? undefined : toast.borderWidth + 'px',
+    }"
     @pointerdown="handlePointerDown"
     @pointercancel="handlePointerCancel"
     @lostpointercapture="handleLostPointerCapture"
@@ -475,7 +494,7 @@ onUnmounted(() => {
       </button>
     </slot>
 
-    <div class="soft-toast-content">
+    <div class="soft-toast-content" :class="classes.content">
       <div
         v-if="toast.component || customRenderComponent"
         class="soft-toast-custom-content"
@@ -493,7 +512,7 @@ onUnmounted(() => {
 
       <template v-else>
         <slot name="icon" :toast="toast" :close-button="closeButton">
-          <div v-if="toast.type === 'promise'" class="soft-toast-icon">
+          <div v-if="toast.type === 'promise'" class="soft-toast-icon" :class="classes.icon">
             <Icon
               class="soft-toast-icon-svg"
               icon="lucide:loader-circle"
@@ -501,26 +520,26 @@ onUnmounted(() => {
               :height="18"
             />
           </div>
-          <ToastIcon
+          <ToastIcon :class="classes.icon"
             v-else-if="toast.icon && typeof toast.icon === 'string'"
             :type="toast.type"
             :customIcon="toast.icon"
           />
-          <div v-else-if="toast.icon" class="soft-toast-icon">
+          <div v-else-if="toast.icon" class="soft-toast-icon" :class="classes.icon">
             <component :is="toast.icon" />
           </div>
-          <ToastIcon v-else-if="toast.type !== 'default'" :type="toast.type" />
+          <ToastIcon :class="classes.icon" v-else-if="toast.type !== 'default'" :type="toast.type" />
         </slot>
 
         <div class="soft-toast-body">
-          <div class="soft-toast-header-row">
+          <div class="soft-toast-header-row" :class="classes.header">
             <slot name="title" :toast="toast" :close-button="closeButton">
               <p
                 class="soft-toast-title"
-                :class="{
+                :class="[classes.title, {
                   'soft-toast-title--has-close':
                     closeButton === true || closeButton === 'top-right',
-                }"
+                }]"
               >
                 {{ toast.title }}
               </p>
@@ -530,10 +549,9 @@ onUnmounted(() => {
           <div
             v-if="toast.description || toast.action"
             class="soft-toast-extra"
-            style="overflow: hidden"
           >
             <slot name="description" :toast="toast" :close-button="closeButton">
-              <p v-if="toast.description" class="soft-toast-description">
+              <p v-if="toast.description" class="soft-toast-description" :class="classes.description">
                 <component
                   v-if="typeof toast.description === 'object'"
                   :is="toast.description"
@@ -551,13 +569,14 @@ onUnmounted(() => {
             >
               <div
                 v-if="normalizedActions.length > 0 && !hasActionSucceeded"
-                class="soft-toast-action"
+                class="soft-toast-action" :class="classes.actionWrapper"
               >
                 <button
                   v-for="(act, idx) in normalizedActions"
                   :key="idx"
                   class="soft-toast-action-button"
                   :class="[
+                    classes.actionButton,
                     act.class || '',
                     act.primary ? 'soft-toast-action-primary' : '',
                   ]"
@@ -566,7 +585,7 @@ onUnmounted(() => {
                   {{ act.label }}
                 </button>
               </div>
-              <div v-else-if="hasActionSucceeded" class="soft-toast-action">
+              <div v-else-if="hasActionSucceeded" class="soft-toast-action" :class="classes.actionWrapper">
                 <span
                   class="soft-toast-action-button soft-toast-action-success"
                   style="opacity: 0.75; cursor: default"
@@ -589,9 +608,7 @@ onUnmounted(() => {
       v-if="
         toast.showProgress && toast.duration > 0 && toast.duration !== Infinity
       "
-      :remaining-time="toast.remainingTime"
-      :total-duration="toast.duration"
-      :is-paused="toast.isPaused"
+      :toast="toast"
     />
   </div>
 </template>

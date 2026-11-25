@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import type { ToastContainerProps } from "../types";
 import { toastStore } from "../stores/toastStore";
 import ToastItem from "./ToastItem.vue";
+import { reduceToastMotion } from "../animations/gsapConfig";
 import { gsap } from "gsap";
 
 // Props with defaults
@@ -10,12 +11,10 @@ const props = withDefaults(defineProps<ToastContainerProps>(), {
   position: "top-right",
   duration: 5000,
   gap: 12,
-  offset: "24px",
   theme: "light",
   spring: true,
   bounce: 0.4,
   preset: "smooth",
-  closeOnEscape: true,
   closeButton: false,
   showProgress: false,
   showTimestamp: false,
@@ -29,38 +28,12 @@ const props = withDefaults(defineProps<ToastContainerProps>(), {
 const containerRef = ref<HTMLElement | null>(null);
 const stackRef = ref<HTMLElement | null>(null);
 const listRef = ref<HTMLElement | null>(null);
-const toastItemRefs = ref<Map<string, InstanceType<typeof ToastItem>>>(
-  new Map(),
-);
-
-const setToastItemRef = (
-  id: string,
-  el: InstanceType<typeof ToastItem> | null,
-) => {
-  if (el) toastItemRefs.value.set(id, el);
-  else toastItemRefs.value.delete(id);
-};
-
 // Get toasts for this container's position
 const positionToasts = computed(() => {
   return toastStore.getToastsByPosition(props.position).value;
 });
 
-// Handle keyboard (Escape to dismiss most recent)
-const handleKeydown = (e: KeyboardEvent) => {
-  if (e.key === "Escape" && props.closeOnEscape) {
-    const toasts = positionToasts.value;
-    if (toasts.length > 0) {
-      toastStore.dismiss(toasts[0].id);
-    }
-  }
-};
-
 onMounted(() => {
-  if (props.closeOnEscape) {
-    document.addEventListener("keydown", handleKeydown);
-  }
-
   // iOS: collapse expanded stack when tapping outside
   document.addEventListener("touchstart", handleOutsideTap, { passive: true });
 
@@ -70,61 +43,20 @@ onMounted(() => {
   });
 
   if (typeof ResizeObserver !== "undefined") {
-    listResizeObserver = new ResizeObserver(() => measureOffsets());
     itemResizeObserver = new ResizeObserver(() => measureOffsets());
-    if (listRef.value) listResizeObserver.observe(listRef.value);
   }
   // Set initial height
   nextTick(() => measureOffsets());
 });
 
 onUnmounted(() => {
-  if (props.closeOnEscape) {
-    document.removeEventListener("keydown", handleKeydown);
-  }
   document.removeEventListener("touchstart", handleOutsideTap);
   stackRef.value?.removeEventListener("touchmove", handleStackTouchMove);
-  if (listResizeObserver) listResizeObserver.disconnect();
+  if (measureRafId !== null) cancelAnimationFrame(measureRafId);
   if (itemResizeObserver) itemResizeObserver.disconnect();
   clearCollapseTimer();
-  observedItems = new WeakSet<HTMLElement>();
+  observedItems.clear();
 });
-
-// Re-measure when the toast list changes or a toast starts leaving.
-// Track length + leaving-count instead of building a `${id}:${isLeaving}`
-// string for every toast on every dependency change (was O(n) string work
-// each tick — expensive when the stack is large).
-watch(
-  () => [
-    positionToasts.value.length,
-    positionToasts.value.reduce((n, t) => (t.isLeaving ? n + 1 : n), 0),
-  ] as const,
-  () => {
-    nextTick(measureOffsets);
-  },
-);
-
-// Apply default options to new toasts
-watch(
-  () => toastStore.toasts.value.length,
-  (newLength, oldLength) => {
-    if (newLength > oldLength) {
-      // New toast added, apply container-level defaults
-      const newToast = toastStore.toasts.value[0];
-      if (newToast) {
-        if (!newToast.duration) newToast.duration = props.duration;
-        if (!newToast.preset) newToast.preset = props.preset;
-        if (newToast.bounce === undefined) newToast.bounce = props.bounce;
-        if (newToast.spring === undefined) newToast.spring = props.spring;
-        if (newToast.showProgress === undefined)
-          newToast.showProgress = props.showProgress;
-        // Only apply container showTimestamp if the toast didn't explicitly set it
-        if (newToast.showTimestamp === undefined)
-          newToast.showTimestamp = props.showTimestamp;
-      }
-    }
-  },
-);
 
 // Position classes
 const positionClass = computed(() => `soft-toast-container--${props.position}`);
@@ -188,7 +120,7 @@ const measureOffsets = () => {
   if (measureRafId !== null) return; // already scheduled
   measureRafId = requestAnimationFrame(() => {
     measureRafId = null;
-    _doMeasureOffsets(false);
+    _doMeasureOffsets();
   });
 };
 
@@ -206,40 +138,22 @@ const hasOffsetChanges = (
   return nextKeys.some((key) => current[key] !== nextOffsets[key]);
 };
 
-const _doMeasureOffsets = (forceSync = false) => {
+const _doMeasureOffsets = () => {
   if (!listRef.value) return;
-  const items = Array.from(
-    listRef.value.querySelectorAll<HTMLElement>(".soft-toast-item"),
-  );
+  const items = Array.from(listRef.value.children) as HTMLElement[];
   observeToastItems(items);
-  const gapPx = props.gap ?? 10;
-  const offsets: number[] = [];
+  const gapPx = props.gap;
+  const offsetMap: Record<string, number> = Object.create(null);
   let cumulative = 0;
   let firstActiveHeight = 0;
-
-  for (let i = 0; i < items.length; i++) {
-    offsets.push(cumulative);
-
-    // Only accumulate height if the toast is not leaving
-    if (items[i].getAttribute("data-leaving") !== "true") {
-      cumulative += items[i].offsetHeight + gapPx;
-      // The front toast is the one that has visual index 0
-      const toastId = items[i].dataset.toastId;
-      const t = positionToasts.value.find((x) => x.id === toastId);
-      if (t) {
-        const vIdx = getVisualIndex(t, positionToasts.value.indexOf(t));
-        if (vIdx === 0) {
-          firstActiveHeight = items[i].offsetHeight;
-        }
-      }
-    }
-  }
-
-  // Build id â†’ offset map instead of positional array
-  const offsetMap: Record<string, number> = {};
-  for (let i = 0; i < items.length; i++) {
-    const toastId = items[i].dataset.toastId;
-    if (toastId) offsetMap[toastId] = offsets[i];
+  for (const item of items) {
+    const id = item.dataset.toastId;
+    if (id === undefined) continue;
+    offsetMap[id] = cumulative;
+    if (item.dataset.leaving === "true") continue;
+    const height = item.offsetHeight;
+    if (item.dataset.stIndex === "0") firstActiveHeight = height;
+    cumulative += height + gapPx;
   }
   const nextTotalHeight = Math.max(0, cumulative - gapPx);
   const changed = hasOffsetChanges(offsetMap, firstActiveHeight, nextTotalHeight);
@@ -254,24 +168,15 @@ const _doMeasureOffsets = (forceSync = false) => {
     clampAndApplyScroll(0); // Applies bounds check without adding new delta
   }
 
-  // Sync list height via GSAP â€” instant set (no tween) when called from measure
+  // Keep the hover area in sync with the measured stack.
   if (listRef.value && changed) {
     const target = isExpanded.value ? totalHeight.value : frontHeight.value;
-    gsap.set(listRef.value, { height: target });
+    listRef.value.style.height = `${target}px`;
   }
 
-  if (isExpanded.value && (changed || forceSync)) {
-    syncExpandedPositions();
-  }
 };
 
-const syncExpandedPositions = () => {
-  renderedToasts.value.forEach((toast) => {
-    const item = toastItemRefs.value.get(toast.id);
-    if (!item) return;
-    item.applyStackPosition(false, expandedOffsets.value[toast.id] ?? 0);
-  });
-};
+watch([renderedToasts, activeToasts, () => props.gap], measureOffsets, { flush: "post" });
 
 // Custom GSAP Scrolling
 const currentScrollY = ref(0);
@@ -298,7 +203,7 @@ const applyStackScrollY = (
   const { min, max } = getScrollBounds();
   currentScrollY.value = Math.max(min, Math.min(nextY, max));
 
-  if (!animate) {
+  if (!animate || reduceToastMotion(listRef.value)) {
     gsap.set(listRef.value, {
       y: currentScrollY.value,
       force3D: true,
@@ -333,24 +238,23 @@ const handleWheel = (e: WheelEvent) => {
   clampAndApplyScroll(e.deltaY);
 };
 
-// Apply list height via GSAP (off main thread, no Vue reactive layout thrashing)
+// Cards animate via transforms while the hover area updates once.
 const applyListHeight = (expanded: boolean) => {
   if (!listRef.value) return;
   const target = expanded ? totalHeight.value : frontHeight.value;
-  gsap.to(listRef.value, {
-    height: target,
-    duration: expanded ? 0.14 : 0.16,
-    ease: expanded ? "power3.out" : "power2.out",
-    overwrite: "auto",
-  });
+  listRef.value.style.height = `${target}px`;
 };
 
-let listResizeObserver: ResizeObserver | null = null;
 let itemResizeObserver: ResizeObserver | null = null;
-let observedItems = new WeakSet<HTMLElement>();
+const observedItems = new Set<HTMLElement>();
 
 const observeToastItems = (items: HTMLElement[]) => {
   if (!itemResizeObserver) return;
+  for (const item of observedItems) {
+    if (item.parentElement === listRef.value) continue;
+    itemResizeObserver.unobserve(item);
+    observedItems.delete(item);
+  }
   for (const item of items) {
     if (observedItems.has(item)) continue;
     observedItems.add(item);
@@ -363,7 +267,7 @@ const handleStackEnter = () => {
   if (isExpanded.value) return;
   isExpanded.value = true;
   nextTick(() => {
-    _doMeasureOffsets(true);
+    _doMeasureOffsets();
     applyListHeight(true);
   });
 };
@@ -376,12 +280,7 @@ const handleStackLeave = () => {
     // Reset GSAP scroll when mouse leaves
     currentScrollY.value = 0;
     if (listRef.value) {
-      gsap.to(listRef.value, {
-        y: 0,
-        duration: 0.2,
-        ease: "power2.out",
-        overwrite: "auto",
-      });
+      applyStackScrollY(0, true, 0.2);
     }
   }, 80);
 };
@@ -488,8 +387,10 @@ const isSwipeToDismissEnabled = computed(() => props.swipeToDismiss !== false);
       ref="containerRef"
       class="soft-toast-container"
       :class="positionClass"
+      :style="{ '--st-offset': typeof offset === 'number' ? `${offset}px` : offset }"
       :data-position="position"
       :data-soft-toast-theme="theme"
+      :data-soft-toast-motion="motion"
       :data-soft-toast-dir="dir"
       :data-expanded="isExpanded"
     >
@@ -508,7 +409,7 @@ const isSwipeToDismissEnabled = computed(() => props.swipeToDismiss !== false);
           <template v-for="(toast, idx) in renderedToasts" :key="toast.id">
             <ToastItem
               v-if="shouldUseSlots(toast)"
-              :ref="(el) => setToastItemRef(toast.id, el as any)"
+              :default-classes="toastOptions?.classNames"
               :toast="toast"
               :index="getVisualIndex(toast, idx)"
               :total="activeToasts.length"
@@ -533,7 +434,7 @@ const isSwipeToDismissEnabled = computed(() => props.swipeToDismiss !== false);
 
             <ToastItem
               v-else
-              :ref="(el) => setToastItemRef(toast.id, el as any)"
+              :default-classes="toastOptions?.classNames"
               :toast="toast"
               :index="getVisualIndex(toast, idx)"
               :total="activeToasts.length"

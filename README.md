@@ -22,7 +22,7 @@ A toast notification library for Vue 3 with fluid motion, stacked layout, and fl
 | Package            | Framework | Supported versions  |
 | ------------------ | --------- | ------------------- |
 | `@soft-toast/vue`  | Vue       | Vue 3.3+            |
-| `@soft-toast/nuxt` | Nuxt      | Nuxt 3.x / Nuxt 4.x |
+| `@soft-toast/vue`  | Nuxt (client plugin) | Nuxt 3.x / Nuxt 4.x |
 
 ## Installation
 
@@ -55,21 +55,19 @@ app.mount("#app");
 
 ### Nuxt 3 / Nuxt 4
 
-```bash
-npm install @soft-toast/nuxt
-```
+Install `@soft-toast/vue` as above. Create `plugins/soft-toast.client.ts` (Nuxt 3)
+or `app/plugins/soft-toast.client.ts` (Nuxt 4) with the following contents:
 
 ```typescript
-// nuxt.config.ts
-export default defineNuxtConfig({
-  modules: ["@soft-toast/nuxt"],
-  softToast: {
-    position: "top-right",
-    closeButton: true,
-    showProgress: true,
-  },
+import { SoftToastPlugin } from "@soft-toast/vue";
+import "@soft-toast/vue/style.css";
+
+export default defineNuxtPlugin(({ vueApp }) => {
+  vueApp.use(SoftToastPlugin, { closeButton: true, showProgress: true });
 });
 ```
+
+Import `softToast` from `@soft-toast/vue` to trigger a notification in a client event handler.
 
 ## Quick Start
 
@@ -77,10 +75,10 @@ export default defineNuxtConfig({
 <script setup lang="ts">
 import { useSoftToast } from "@soft-toast/vue";
 
-const toast = useSoftToast();
+const softToast = useSoftToast();
 
 const save = () => {
-  toast.success("Profile saved!", {
+  softToast.success("Profile saved!", {
     description: "Your changes have been successfully saved.",
     duration: 2500,
     showProgress: true,
@@ -93,10 +91,15 @@ const save = () => {
 </template>
 ```
 
-Plugin options are global defaults. Override them per toast as needed:
+Plugin options apply to both `softToast` and `useSoftToast()`. Set `position`,
+`duration`, or `showProgress` once at installation. Options on a single
+notification take precedence. Updating its duration restarts the countdown
+and progress bar together. Updating only the message keeps the existing deadline.
+For custom content, `toast.remainingTime` is a snapshot. Read
+`toastStore.getRemainingTime(toast)` for the current milliseconds remaining.
 
 ```typescript
-toast.warning("File moved to trash", {
+softToast.warning("File moved to trash", {
   description: "You can restore it from the activity log.",
   position: "bottom-right",
   duration: Infinity,
@@ -111,7 +114,7 @@ toast.warning("File moved to trash", {
 Returns a composable instance bound to the Vue component lifecycle.
 
 ```typescript
-const toast = useSoftToast();
+const softToast = useSoftToast();
 ```
 
 ### `softToast`
@@ -128,22 +131,22 @@ softToast.error("Session expired", { duration: 6000 });
 
 | Method                             | Description                                           |
 | ---------------------------------- | ----------------------------------------------------- |
-| `toast.default(title, options?)`   | Default (unstyled) toast                              |
-| `toast.success(title, options?)`   | Success toast                                         |
-| `toast.error(title, options?)`     | Error toast                                           |
-| `toast.warning(title, options?)`   | Warning toast                                         |
-| `toast.info(title, options?)`      | Info toast                                            |
-| `toast.loading(title, options?)`   | Persistent loading toast (use `update` to resolve it) |
-| `toast.promise(promise, messages)` | Auto-transitions loading → success / error            |
-| `toast.custom(options)`            | Full control, including custom Vue component content  |
-| `toast.update(id, options)`        | Update a visible toast by ID                          |
-| `toast.dismiss(id?)`               | Dismiss one toast by ID, or all toasts if omitted     |
-| `toast.dismissAll()`               | Dismiss all visible toasts                            |
-| `toast.pause(id)`                  | Pause the auto-close timer                            |
-| `toast.resume(id)`                 | Resume the auto-close timer                           |
-| `toast.flash(title, options?)`     | Queue a toast that shows after the next navigation    |
-| `toast.showFlashes()`              | Consume and show pending flash messages               |
-| `toast.hasFlashes()`               | Returns `true` if there are pending flash messages    |
+| `softToast.default(title, options?)`   | Default (unstyled) toast                              |
+| `softToast.success(title, options?)`   | Success toast                                         |
+| `softToast.error(title, options?)`     | Error toast                                           |
+| `softToast.warning(title, options?)`   | Warning toast                                         |
+| `softToast.info(title, options?)`      | Info toast                                            |
+| `softToast.loading(title, options?)`   | Persistent loading toast (use `update` to resolve it) |
+| `softToast.promise(promise, messages)` | Auto-transitions loading → success / error            |
+| `softToast.custom(options)`            | Full control, including custom Vue component content  |
+| `softToast.update(id, options)`        | Update a visible toast by ID                          |
+| `softToast.dismiss(id?)`               | Dismiss one toast by ID, or all toasts if omitted     |
+| `softToast.dismissAll()`               | Dismiss all visible toasts                            |
+| `softToast.pause(id)`                  | Pause the auto-close timer                            |
+| `softToast.resume(id)`                 | Resume the auto-close timer                           |
+| `softToast.flash(title, options?)`     | Queue a toast that shows after the next navigation    |
+| `softToast.showFlashes()`              | Consume and show pending flash messages               |
+| `softToast.hasFlashes()`               | Returns `true` if there are pending flash messages    |
 
 ### Dismissal behavior
 
@@ -156,7 +159,7 @@ Manual dismissal callbacks run once per dismissed toast, including
 ### `promise` example
 
 ```typescript
-toast.promise(api.saveProfile(data), {
+softToast.promise(api.saveProfile(data), {
   loading: "Saving…",
   success: "Profile saved!",
   error: (err) => `Failed: ${err.message}`,
@@ -170,11 +173,11 @@ toast.promise(api.saveProfile(data), {
 ### `update` example
 
 ```typescript
-const id = toast.loading("Uploading…");
+const id = softToast.loading("Uploading…");
 
 await uploadFile(file);
 
-toast.update(id, {
+softToast.update(id, {
   type: "success",
   title: "Upload complete!",
   duration: 3000,
@@ -225,11 +228,11 @@ Supports **Iconify** icon strings and custom Vue components:
 
 ```typescript
 // Iconify icon string
-toast.success("Deployed!", { icon: "line-md:rocket-launch" });
+softToast.success("Deployed!", { icon: "line-md:rocket-launch" });
 
 // Custom Vue component
 import MyIcon from "./MyIcon.vue";
-toast.info("Update available", { icon: MyIcon });
+softToast.info("Update available", { icon: MyIcon });
 ```
 
 ## Flash Messages
@@ -237,11 +240,11 @@ toast.info("Update available", { icon: MyIcon });
 Queue a toast that survives a page navigation and shows on the next load:
 
 ```typescript
-const toast = useSoftToast();
+const softToast = useSoftToast();
 
 const save = async () => {
   await api.save();
-  toast.flash("Changes saved!", { type: "success" });
+  softToast.flash("Changes saved!", { type: "success" });
   router.push("/dashboard");
 };
 ```
@@ -253,12 +256,53 @@ In `App.vue` or your root layout, consume pending flashes on mount:
 import { onMounted } from "vue";
 import { useSoftToast } from "@soft-toast/vue";
 
-const toast = useSoftToast();
-onMounted(() => toast.showFlashes());
+const softToast = useSoftToast();
+onMounted(() => softToast.showFlashes());
 </script>
 ```
 
 Flash messages expire automatically after 30 seconds if not consumed.
+
+## Lower-motion notifications
+
+Set `motion: "reduced"` in the plugin options (or on a manual container) to
+place cards immediately during entry, exit and restacking. The default
+`"auto"` follows the operating system's reduced-motion preference.
+For a smaller stack on slower devices, combine this with `maxQueue: 3`.
+
+## Match your site's theme
+
+Import your theme stylesheet after `@soft-toast/vue/style.css`. Toasts mount under
+`body`, so put these variables in global CSS. Set both radius variables for
+uniform corners. Leave either unset to keep the built-in shape.
+
+```css
+.soft-toast-container {
+  --st-surface: #172033;
+  --st-title-color: white;
+  --st-description-color: #d1d5db;
+  --st-font-family: inherit;
+  --st-radius: 10px;
+  --st-corner-radius: 10px;
+  --st-padding: 12px 16px;
+  --st-card-shadow: none;
+}
+```
+
+To reuse your site's existing CSS classes, configure the parts once. A toast
+can override individual parts and inherit the other configured classes.
+
+```typescript
+app.use(SoftToastPlugin, {
+  toastOptions: { classNames: { title: "notice-heading", actionButton: "brand-button" } },
+});
+
+softToast.error("Upload failed", { classNames: { title: "error-heading" } });
+```
+
+With a manually mounted container, pass the same object as its `toastOptions`
+prop. Available parts are `wrapper`, `content`, `header`, `title`, `icon`,
+`description`, `actionWrapper`, and `actionButton`.
 
 ## Custom Component Toasts
 
@@ -292,12 +336,12 @@ defineProps<{
 import { useSoftToast } from "@soft-toast/vue";
 import UserInviteToast from "./UserInviteToast.vue";
 
-const toast = useSoftToast();
+const softToast = useSoftToast();
 
 const showUserToast = async () => {
   const user = await fetchUser();
 
-  toast.custom({
+  softToast.custom({
     component: UserInviteToast,
     props: { user },
     duration: 8000,
@@ -327,7 +371,7 @@ For advanced cases, use a render function:
 import { h } from "vue";
 import UserInviteToast from "./UserInviteToast.vue";
 
-toast.custom({
+softToast.custom({
   render: ({ dismiss }) => h(UserInviteToast, { user, dismiss }),
 });
 ```
@@ -335,7 +379,7 @@ toast.custom({
 ## Custom Slots
 
 Use slots when you want to restyle the toast layout globally or for a group of toasts.
-For one-off custom content from a feature component, prefer `toast.custom({ component, props })`.
+For one-off custom content from a feature component, prefer `softToast.custom({ component, props })`.
 
 When using slots, disable the plugin's auto-mounted container and place it manually in your layout:
 
@@ -394,7 +438,7 @@ softToast.info('Hello', { meta: { useCustomSlots: true } })
 | Prop             | Type                                           | Default         | Description                                          |
 | ---------------- | ---------------------------------------------- | --------------- | ---------------------------------------------------- |
 | `position`       | `ToastPosition`                                | `'top-right'`   | Default position for all toasts                      |
-| `duration`       | `number`                                       | `5000`          | Default auto-close delay                             |
+| `duration`       | `number`                                       | `4000`          | Default auto-close delay                             |
 | `theme`          | `'light' \| 'dark'`                            | `'light'`       | Color theme                                          |
 | `preset`         | `'smooth' \| 'bouncy' \| 'subtle' \| 'snappy'` | `'smooth'`      | Default motion preset                                |
 | `closeButton`    | `boolean \| 'top-left' \| 'top-right'`         | `false`         | Show close button on all toasts                      |
@@ -405,7 +449,7 @@ softToast.info('Hello', { meta: { useCustomSlots: true } })
 | `maxQueue`       | `number`                                       | `10`            | Maximum number of toasts visible at once             |
 | `queueOverflow`  | `'drop-oldest' \| 'drop-newest'`               | `'drop-oldest'` | What to drop when queue is full                      |
 | `gap`            | `number`                                       | `12`            | Gap in px between expanded toasts                    |
-| `offset`         | `number \| string`                             | `'24px'`        | Distance from the screen edge                        |
+| `offset`         | `number \| string`                             | `32px` desktop, `12px` at ≤640px | Distance from the screen edge. Numbers use pixels. CSS lengths such as `2rem` are supported. |
 | `dir`            | `'ltr' \| 'rtl'`                               | `'ltr'`         | Text direction                                       |
 | `slotFilter`     | `(toast: Toast) => boolean`                    | `undefined`     | Function to select which toasts receive custom slots |
 

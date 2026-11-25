@@ -1,45 +1,20 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted, onMounted } from 'vue'
-import { progressAnimation, pauseAnimation, resumeAnimation } from '../animations/gsapConfig'
+import { ref, watchEffect } from 'vue'
+import type { Toast } from '../types'
+import { getRemainingTime } from '../stores/toastStore'
+import { progressAnimation } from '../animations/gsapConfig'
 
-interface Props {
-  remainingTime: number
-  totalDuration: number
-  isPaused: boolean
-}
-
-const props = defineProps<Props>()
-
+const props = defineProps<{ toast: Toast }>()
 const progressRef = ref<HTMLElement | null>(null)
-const animation = ref<gsap.core.Tween | null>(null)
 
-// Initialize animation on mount
-onMounted(() => {
-  if (!progressRef.value) return
-  
-  animation.value = progressAnimation(
-    progressRef.value,
-    props.remainingTime,
-  )
-  
-  if (props.isPaused) {
-    pauseAnimation(animation.value)
-  }
-})
-
-// Handle pause/resume
-watch(() => props.isPaused, (isPaused) => {
-  if (!animation.value) return
-  
-  if (isPaused) {
-    pauseAnimation(animation.value)
-  } else {
-    resumeAnimation(animation.value)
-  }
-})
-
-onUnmounted(() => {
-  animation.value?.kill()
+watchEffect((onCleanup) => {
+  const element = progressRef.value
+  if (!element) return
+  const toast = props.toast
+  const remaining = getRemainingTime(toast)
+  const tween = progressAnimation(element, toast.duration)
+  tween.time((toast.duration - remaining) / 1000).paused(toast.isPaused)
+  onCleanup(() => tween.kill())
 })
 </script>
 

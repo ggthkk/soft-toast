@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { toastStore } from "./toastStore";
+import { setPageHidden, setToastDefaults, toastStore } from "./toastStore";
 
 const waitForExitCleanup = () =>
   new Promise((resolve) => setTimeout(resolve, 425));
@@ -345,5 +345,52 @@ describe("toastStore — dismiss race conditions", () => {
     toastStore.dismiss();
 
     expect(dismissed).toEqual(["b", "a"]);
+  });
+});
+
+describe("toast configuration and paused deadlines", () => {
+  beforeEach(() => toastStore.clearAll());
+
+  it("uses configured defaults and preserves explicit false and zero overrides", () => {
+    try {
+      setToastDefaults({ position: "bottom-left", duration: 1200, showProgress: true });
+      toastStore.success("Saved");
+      expect(toastStore.toasts.value[0]).toMatchObject({
+        position: "bottom-left", duration: 1200, showProgress: true,
+      });
+      toastStore.info("Details", { position: "top", duration: 0, showProgress: false });
+      expect(toastStore.toasts.value[0]).toMatchObject({
+        position: "top", duration: 0, showProgress: false,
+      });
+    } finally {
+      setToastDefaults({});
+    }
+  });
+
+  it("retains a manual pause across page visibility and a duration restart", () => {
+    const id = toastStore.loading("Working");
+    toastStore.pause(id);
+    try {
+      setPageHidden(true);
+      toastStore.update(id, { duration: 700 });
+      setPageHidden(false);
+      expect(toastStore.toasts.value[0]).toMatchObject({ isPaused: true, remainingTime: 700 });
+      toastStore.resume(id);
+      expect(toastStore.toasts.value[0].isPaused).toBe(false);
+    } finally {
+      setPageHidden(false);
+    }
+  });
+
+  it("pauses notifications created while the page is hidden", () => {
+    try {
+      setPageHidden(true);
+      toastStore.info("Saved", { duration: 800 });
+      expect(toastStore.toasts.value[0].isPaused).toBe(true);
+      setPageHidden(false);
+      expect(toastStore.toasts.value[0]).toMatchObject({ isPaused: false, remainingTime: 800 });
+    } finally {
+      setPageHidden(false);
+    }
   });
 });

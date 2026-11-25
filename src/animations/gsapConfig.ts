@@ -30,6 +30,10 @@ gsap.defaults({ overwrite: 'auto' })
 const isTouchDevice = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 const DUR = (s: number) => isTouchDevice ? s * 0.65 : s
 
+export const reduceToastMotion = (element: HTMLElement) =>
+  element.closest('[data-soft-toast-motion="reduced"]') !== null ||
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
 const QUICK_SETTLE_DURATION = 0.22
 const SOFT_SETTLE_EASE = 'power2.out'
 
@@ -94,14 +98,6 @@ export const landingAnimation = (
 
   const tl = gsap.timeline()
   
-  // Find extra wrapper
-  const extra = element.querySelector('.soft-toast-extra') as HTMLElement
-
-  if (extra) {
-    gsap.set(extra, { height: 0, opacity: 0 })
-  }
-
-  // 1. Soft and bouncy "pudding" pop (overshoot effect)
   tl.fromTo(element,
     { y: yFrom, opacity: 0, scale: 0.94 },
     {
@@ -111,18 +107,6 @@ export const landingAnimation = (
       transformOrigin: direction === 'down' ? 'top center' : 'bottom center'
     }
   )
-
-  // 2. Expand extra content softly
-  if (extra) {
-    tl.to(extra, {
-      height: 'auto',
-      opacity: 1,
-      duration: DUR(0.36),
-      force3D: true,
-      ease: SOFT_SETTLE_EASE,
-      clearProps: 'overflow'
-    }, "-=0.32") // Start expanding seamlessly as the main pop slows down
-  }
 
   return tl
 }
@@ -152,10 +136,11 @@ export const morphAnimation = (
   return tl
 }
 
-// Exit: Soft scale down + fade, then collapse height so the gap closes cleanly
+// Leaving cards are already excluded from stack measurements.
 export const exitAnimation = (
   element: HTMLElement
 ) => {
+  if (reduceToastMotion(element)) return gsap.set(element, { opacity: 0, overwrite: true })
   const tl = gsap.timeline()
   tl.to(element, {
     scale: 0.85,
@@ -165,14 +150,6 @@ export const exitAnimation = (
     duration: 0.2,
     ease: 'power2.out',
   })
-  tl.to(element, {
-    height: 0,
-    paddingTop: 0,
-    paddingBottom: 0,
-    marginBottom: 0,
-    duration: 0.14,
-    ease: 'power2.in',
-  }, '-=0.05')
   return tl
 }
 
@@ -181,6 +158,7 @@ export const swipeExitAnimation = (
   element: HTMLElement,
   toX: number  // positive = fly right, negative = fly left
 ) => {
+  if (reduceToastMotion(element)) return gsap.set(element, { opacity: 0, overwrite: true })
   return gsap.to(element, {
     x: toX,
     opacity: 0,
@@ -249,6 +227,17 @@ export const positionAnimation = (
 
   const config = presetConfigs[preset] || presetConfigs.smooth
   const sign = direction === 'up' ? -1 : 1
+
+  if (reduceToastMotion(element)) {
+    const depth = Math.min(index, maxVisible)
+    return gsap.set(element, {
+      x: 0, rotate: 0,
+      y: sign * (expanded ? expandedOffset : depth * liftPx),
+      scale: expanded ? 1 : 1 - depth * scaleStep,
+      opacity: expanded ? 1 : index >= maxVisible ? 0 : Math.max(0, 1 - depth * opacityStep),
+      overwrite: true,
+    })
+  }
 
   if (expanded) {
     // Expanded hover and dismiss restacking share one soft settle timing.

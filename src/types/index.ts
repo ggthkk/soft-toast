@@ -141,6 +141,7 @@ export interface Toast extends Required<
 }
 
 export interface ToastContainerProps {
+  motion?: "auto" | "reduced";
   position?: ToastPosition;
   duration?: number;
   gap?: number;

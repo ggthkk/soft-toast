@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0 - 2026-11-25
+
+- Mount only active toast positions and batch swipe updates per frame.
+- Schedule auto-close at the deadline. Progress follows pauses, resumes, and duration resets.
+- Apply plugin defaults to both `softToast` and `useSoftToast()` calls. Individual toasts can override them.
+- Support `motion: "reduced"`, theme CSS variables, and `toastOptions.classNames`.
+- Honor numeric and CSS `offset` values. Escape dismisses the newest active toast across all positions.
+- For custom countdowns, use `toastStore.getRemainingTime(toast)` to read the current time remaining in milliseconds.
+
 ## 1.1.5 - 2026-07-16
 
 ### Fixed
